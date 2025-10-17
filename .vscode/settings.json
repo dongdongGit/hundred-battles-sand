@@ -1,0 +1,28 @@
+{
+    "files.associations": {
+        "*.ahk": "ahk",
+        "*.ahk2": "ahk"
+    },
+    "ahk.language": "v2",
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "ms-vscode.powershell",
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "files.exclude": {
+        "**/node_modules": true,
+        "**/logs": true,
+        "**/temp": true,
+        "**/*.exe": true,
+        "**/*.log": false
+    },
+    "ahk.executablePath": "C:\\Program Files\\AutoHotkey\\v2\\AutoHotkey.exe",
+    "search.exclude": {
+        "**/node_modules": true,
+        "**/logs": true,
+        "**/*.exe": true
+    },
+    "files.watcherExclude": {
+        "**/logs/**": true,
+        "**/temp/**": true
+    }
+}

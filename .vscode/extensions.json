@@ -1,0 +1,17 @@
+{
+    "recommendations": [
+        "mark-wiemer.vscode-autohotkey-plus-plus",
+        "helsmy.autohotkey-debug",
+        "thqby.vscode-autohotkey2-lsp",
+        "esbenp.prettier-vscode",
+        "ms-vscode.powershell",
+        "ms-vscode.vscode-json",
+        "eamodio.gitlens",
+        "ms-vscode-remote.remote-wsl",
+        "formulahendry.code-runner",
+        "ms-vscode.vscode-typescript-next"
+    ],
+    "unwantedRecommendations": [
+        "ms-vscode.vscode-autohotkey"
+    ]
+}
