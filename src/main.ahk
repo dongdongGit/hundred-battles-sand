@@ -17,18 +17,18 @@
 ; 全局变量
 global AppName := "百战沙场自动化"
 global AppVersion := "1.0.0"
-global ConfigFile := A_ScriptDir "\resources\config\config.ini"
-global LogFile := A_ScriptDir "\logs\app.log"
+global ConfigFile := A_ScriptDir "\..\resources\config\config.ini"
+global LogFile := A_ScriptDir "\..\logs\app.log"
 global GameWindowClass := "MainView_9F956014-12FC-42d8-80C7-9A90D4D567E3"
 global GameWindowTitle := "百战沙场"
 
 ; 包含模块
-#Include "lib\Logger.ahk"
-#Include "lib\Config.ahk"
-#Include "lib\WindowManager.ahk"
-#Include "lib\GameController.ahk"
-#Include "lib\ImageRecognition.ahk"
-#Include "lib\TaskManager.ahk"
+#Include "modules\Logger.ahk"
+#Include "modules\Config.ahk"
+#Include "modules\WindowManager.ahk"
+#Include "modules\GameController.ahk"
+#Include "modules\ImageRecognition.ahk"
+#Include "modules\TaskManager.ahk"
 #Include "gui\MainGUI.ahk"
 
 class AutomationApp {
@@ -179,4 +179,4 @@ TrayTip(AppName " 已启动", Format("按 F10 开始, F11 停止, F12 退出`n�
 return
 
 ; 包含错误处理
-#Include "lib\ErrorHandler.ahk"
+#Include "modules\ErrorHandler.ahk"
