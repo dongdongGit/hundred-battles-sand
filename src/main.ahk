@@ -1,7 +1,7 @@
 /**
  * 百战沙场自动化脚本 - 主程序入口
  * AutoHotkey v2.0
- *
+ * 
  * 功能：
  * - 游戏自动化控制
  * - 图形界面管理
@@ -29,6 +29,9 @@ global GameWindowTitle := "百战沙场"
 #Include "modules\GameController.ahk"
 #Include "modules\ImageRecognition.ahk"
 #Include "modules\TaskManager.ahk"
+#Include "modules\DemonPurgeTask.ahk"
+#Include "modules\DemonPurgeTemplates.ahk"
+#Include "utils\DemonPurgeTest.ahk"
 #Include "gui\MainGUI.ahk"
 
 class AutomationApp {

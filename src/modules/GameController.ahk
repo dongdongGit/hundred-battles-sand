@@ -338,8 +338,8 @@ class GameController {
     Wait(milliseconds, description := "") {
         ; 添加随机延迟避免检测
         randomDelay := ConfigInstance.GetInt("game", "random_delay_min", 200) +
-                      Random(0, ConfigInstance.GetInt("game", "random_delay_max", 800) -
-                             ConfigInstance.GetInt("game", "random_delay_min", 200))
+            Random(0, ConfigInstance.GetInt("game", "random_delay_max", 800) -
+                ConfigInstance.GetInt("game", "random_delay_min", 200))
 
         totalWait := milliseconds + randomDelay
 

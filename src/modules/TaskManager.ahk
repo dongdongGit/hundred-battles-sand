@@ -77,6 +77,15 @@ class TaskManager {
                 "interval", 3600,   ; 1小时
                 "priority", 4,
                 "timeout", 600
+            ),
+            "demon_purge", Map(
+                "name", "除魔任务",
+                "description", "自动完成除魔任务，包括接取、执行和领取奖励",
+                "enabled", true,
+                "interval", 1800,   ; 30分钟（除魔任务冷却时间）
+                "priority", 9,
+                "timeout", 1800,    ; 30分钟超时
+                "max_runs_per_day", 10
             )
         )
     }
@@ -272,6 +281,8 @@ class TaskManager {
                     this.ExecuteHangupFarming(task)
                 case "friend_interaction":
                     this.ExecuteFriendInteraction(task)
+                case "demon_purge":
+                    this.ExecuteDemonPurge(task)
                 default:
                     throw Error("未知任务类型: " taskId)
             }
@@ -351,6 +362,29 @@ class TaskManager {
         Sleep(3000)
 
         LoggerInstance.Info("好友互动完成")
+    }
+
+    ExecuteDemonPurge(task) {
+        LoggerInstance.Info("开始执行除魔任务")
+
+        try {
+            ; 创建除魔任务实例
+            demonPurgeTask := DemonPurgeTask()
+
+            ; 执行除魔任务流程
+            success := demonPurgeTask.ExecuteFullCycle()
+
+            if (success) {
+                LoggerInstance.Info("除魔任务执行完成")
+            }
+            else {
+                LoggerInstance.Warn("除魔任务执行失败或无需执行")
+            }
+        }
+        catch as e {
+            LoggerInstance.Error(Format("除魔任务执行出错: {}", e.Message))
+            throw e
+        }
     }
 
     CompleteTask(taskId, success, errorMsg := "") {
