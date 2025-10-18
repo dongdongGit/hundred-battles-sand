@@ -3,6 +3,8 @@
  * 用于测试和调试除魔任务自动化功能
  */
 
+#Requires AutoHotkey v2.0
+
 class DemonPurgeTest {
     __New() {
         this.logger := LoggerInstance

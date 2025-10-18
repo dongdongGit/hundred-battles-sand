@@ -3,6 +3,8 @@
  * 提供文件读写、路径处理、格式转换等实用功能
  */
 
+#Requires AutoHotkey v2.0
+
 class FileUtils {
     /**
      * 读取文件内容

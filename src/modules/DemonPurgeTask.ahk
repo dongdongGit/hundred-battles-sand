@@ -3,6 +3,8 @@
  * 处理除魔任务的完整自动化流程，包括接取、执行和奖励领取
  */
 
+#Requires AutoHotkey v2.0
+
 class DemonPurgeTask {
     __New() {
         this.gameController := GameControllerInstance
@@ -761,5 +763,4 @@ class DemonPurgeTask {
     }
 }
 
-; 全局除魔任务实例
-global DemonPurgeTaskInstance := DemonPurgeTask()
+; 注意：不再创建全局实例，由主程序统一管理

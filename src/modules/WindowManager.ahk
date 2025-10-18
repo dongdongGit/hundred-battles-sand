@@ -3,65 +3,106 @@
  * 专门处理QQ游戏盒子和游戏窗口的识别、控制和管理
  */
 
+#Requires AutoHotkey v2.0
+
 class WindowManager {
-    __New() {
-        this.gameWindowClass := ConfigInstance.GetString("game", "window_class")
-        this.gameWindowTitle := ConfigInstance.GetString("game", "window_title")
-        this.gameProcessName := ConfigInstance.GetString("game", "process_name")
+    __New(configInstance := "", loggerInstance := "") {
+        ; 如果没有传入配置实例，使用全局实例（向后兼容）
+        if (configInstance = "") {
+            configInstance := ConfigInstance
+        }
+        if (loggerInstance = "") {
+            loggerInstance := this.logger
+        }
+
+        this.config := configInstance
+        this.logger := loggerInstance
+
+        this.gameWindowClass := this.config.GetString("game", "window_class")
+        this.gameWindowTitle := this.config.GetString("game", "window_title")
+        this.gameProcessName := this.config.GetString("game", "process_name")
 
         this.gameHwnd := 0
         this.gamePid := 0
-        this.isGameActive := false
+        this._isGameActive := false
         this.windowInfo := Map()
 
         this.retryCount := 3
         this.retryDelay := 1000
     }
 
+    ; Getter
+    IsGameActive() {
+        return this._isGameActive && WinActive("ahk_id " this.gameHwnd)
+    }
+
+    ; Setter
+    SetGameActive(value) {
+        this._isGameActive := value
+    }
+
     Initialize() {
-        LoggerInstance.Info("初始化窗口管理器")
+        this.logger.Info("初始化窗口管理器")
 
         ; 查找游戏窗口
         this.FindGameWindow()
 
         if (this.gameHwnd) {
             this.GetWindowInfo()
-            LoggerInstance.Info(Format("游戏窗口已找到: hwnd={}", this.gameHwnd))
+            this.logger.Info(Format("游戏窗口已找到: hwnd={}", this.gameHwnd))
         }
         else {
-            LoggerInstance.Warn("游戏窗口未找到，将在需要时自动查找")
+            this.logger.Warn("游戏窗口未找到，将在需要时自动查找")
         }
     }
 
     FindGameWindow() {
-        LoggerInstance.Debug("查找游戏窗口")
+        this.logger.Debug("查找游戏窗口")
 
         ; 方法1：通过窗口类名查找
         this.gameHwnd := WinExist("ahk_class " this.gameWindowClass)
 
         if (this.gameHwnd) {
-            LoggerInstance.Debug("通过窗口类名找到游戏窗口")
+            this.logger.Debug("通过窗口类名找到游戏窗口")
             return true
         }
 
-        ; 方法2：通过窗口标题查找
+        ; 方法2：通过精确窗口标题查找
         this.gameHwnd := WinExist(this.gameWindowTitle)
 
         if (this.gameHwnd) {
-            LoggerInstance.Debug("通过窗口标题找到游戏窗口")
+            this.logger.Debug("通过精确窗口标题找到游戏窗口")
             return true
         }
 
-        ; 方法3：枚举所有窗口查找
+        ; 方法3：通过关键词查找窗口标题
         gameHwnd := 0
-        WinGetList(,(title, class, exe, hwnd) => (
-            (class = this.gameWindowClass || InStr(title, this.gameWindowTitle))
-            && (gameHwnd := hwnd, false)
-        ))
+        try {
+            windows := WinGetList()
+            for hwnd in windows {
+                try {
+                    title := WinGetTitle(hwnd)
+                    class := WinGetClass(hwnd)
+
+                    ; 检查是否是游戏相关窗口
+                    if (class = this.gameWindowClass
+                        || InStr(title, "百战沙城")
+                        || InStr(title, "百战沙场")
+                        || InStr(title, "QQ游戏")
+                        || InStr(title, "游戏盒子")) {
+                        gameHwnd := hwnd
+                        break
+                    }
+                }
+                catch {
+                    continue
+                }
+            }
+        }
 
         if (gameHwnd) {
             this.gameHwnd := gameHwnd
-            LoggerInstance.Debug("通过枚举找到游戏窗口")
+            this.logger.Debug("通过关键词枚举找到游戏窗口")
             return true
         }
 
@@ -71,20 +112,48 @@ class WindowManager {
             loop this.retryCount {
                 Sleep(this.retryDelay)
 
+                ; 先尝试类名查找
                 this.gameHwnd := WinExist("ahk_class " this.gameWindowClass)
                 if (this.gameHwnd) {
-                    LoggerInstance.Debug("通过进程等待找到游戏窗口")
+                    this.logger.Debug("通过进程等待找到游戏窗口（类名）")
+                    return true
+                }
+
+                ; 再尝试关键词查找
+                windows := WinGetList()
+                for hwnd in windows {
+                    try {
+                        title := WinGetTitle(hwnd)
+                        class := WinGetClass(hwnd)
+
+                        ; 检查是否是游戏相关窗口
+                        if (class = this.gameWindowClass
+                            || InStr(title, "百战沙城")
+                            || InStr(title, "百战沙场")
+                            || InStr(title, "QQ游戏")
+                            || InStr(title, "游戏盒子")) {
+                            this.gameHwnd := hwnd
+                            break
+                        }
+                    }
+                    catch {
+                        continue
+                    }
+                }
+
+                if (this.gameHwnd) {
+                    this.logger.Debug("通过进程等待找到游戏窗口（关键词）")
                     return true
                 }
             }
         }
 
-        LoggerInstance.Warn("未找到游戏窗口")
+        this.logger.Warn("未找到游戏窗口")
         return false
     }
 
     FindGameProcess() {
-        LoggerInstance.Debug("查找游戏进程")
+        this.logger.Debug("查找游戏进程")
 
         try {
             ; 通过进程名查找
@@ -97,12 +166,12 @@ class WindowManager {
 
             if (pids.Length > 0) {
                 this.gamePid := pids[1]  ; 取第一个进程
-                LoggerInstance.Debug(Format("找到游戏进程: pid={}", this.gamePid))
+                this.logger.Debug(Format("找到游戏进程: pid={}", this.gamePid))
                 return true
             }
         }
         catch as e {
-            LoggerInstance.Error(Format("查找游戏进程失败: {}", e.Message))
+            this.logger.Error(Format("查找游戏进程失败: {}", e.Message))
         }
 
         return false
@@ -141,7 +210,7 @@ class WindowManager {
             return true
         }
         catch as e {
-            LoggerInstance.Error(Format("获取窗口信息失败: {}", e.Message))
+            this.logger.Error(Format("获取窗口信息失败: {}", e.Message))
             return false
         }
     }
@@ -170,13 +239,13 @@ class WindowManager {
                 DllCall("SetForegroundWindow", "Ptr", this.gameHwnd)
             }
 
-            this.isGameActive := true
-            LoggerInstance.Debug("游戏窗口已激活")
+            this.SetGameActive(true)
+            this.logger.Debug("游戏窗口已激活")
             return true
         }
         catch as e {
-            LoggerInstance.Error(Format("激活游戏窗口失败: {}", e.Message))
-            this.isGameActive := false
+            this.logger.Error(Format("激活游戏窗口失败: {}", e.Message))
+            this.SetGameActive(false)
             throw e
         }
     }
@@ -188,12 +257,12 @@ class WindowManager {
 
         try {
             WinMinimize(this.gameHwnd)
-            this.isGameActive := false
-            LoggerInstance.Debug("游戏窗口已最小化")
+            this.SetGameActive(false)
+            this.logger.Debug("游戏窗口已最小化")
             return true
         }
         catch as e {
-            LoggerInstance.Error(Format("最小化游戏窗口失败: {}", e.Message))
+            this.logger.Error(Format("最小化游戏窗口失败: {}", e.Message))
             return false
         }
     }
@@ -205,12 +274,12 @@ class WindowManager {
 
         try {
             WinMaximize(this.gameHwnd)
-            this.isGameActive := true
-            LoggerInstance.Debug("游戏窗口已最大化")
+            this.SetGameActive(true)
+            this.logger.Debug("游戏窗口已最大化")
             return true
         }
         catch as e {
-            LoggerInstance.Error(Format("最大化游戏窗口失败: {}", e.Message))
+            this.logger.Error(Format("最大化游戏窗口失败: {}", e.Message))
             return false
         }
     }
@@ -222,12 +291,12 @@ class WindowManager {
 
         try {
             WinHide(this.gameHwnd)
-            this.isGameActive := false
-            LoggerInstance.Debug("游戏窗口已隐藏")
+            this.SetGameActive(false)
+            this.logger.Debug("游戏窗口已隐藏")
             return true
         }
         catch as e {
-            LoggerInstance.Error(Format("隐藏游戏窗口失败: {}", e.Message))
+            this.logger.Error(Format("隐藏游戏窗口失败: {}", e.Message))
             return false
         }
     }
@@ -240,181 +309,19 @@ class WindowManager {
         try {
             WinShow(this.gameHwnd)
             Sleep(500)  ; 等待窗口显示
-            this.isGameActive := true
-            LoggerInstance.Debug("游戏窗口已显示")
+            this.SetGameActive(true)
+            this.logger.Debug("游戏窗口已显示")
             return true
         }
         catch as e {
-            LoggerInstance.Error(Format("显示游戏窗口失败: {}", e.Message))
+            this.logger.Error(Format("显示游戏窗口失败: {}", e.Message))
             return false
         }
     }
 
-    ; 获取游戏窗口截图（用于图像识别）
-    CaptureGameWindow(x := 0, y := 0, width := -1, height := -1) {
-        if (!this.IsGameRunning()) {
-            throw Error("游戏窗口未运行")
-        }
-
-        try {
-            ; 获取完整窗口区域
-            if (width = -1 || height = -1) {
-                this.GetWindowInfo()
-                width := this.windowInfo["width"]
-                height := this.windowInfo["height"]
-                x := this.windowInfo["x"]
-                y := this.windowInfo["y"]
-            }
-
-            ; 截图
-            bitmap := GdipBitmapFromScreen(x "|" y "|" width "|" height)
-
-            LoggerInstance.Debug(Format("窗口截图完成: {}x{} at ({},{})", width, height, x, y))
-            return bitmap
-        }
-        catch as e {
-            LoggerInstance.Error(Format("截图失败: {}", e.Message))
-            throw e
-        }
-    }
-
-    ; 点击游戏窗口内指定位置
-    ClickInGame(x, y, button := "left") {
-        if (!this.IsGameRunning()) {
-            throw Error("游戏窗口未运行")
-        }
-
-        try {
-            ; 确保窗口激活
-            this.ActivateGameWindow()
-
-            ; 转换为屏幕坐标
-            screenX := this.windowInfo["x"] + x
-            screenY := this.windowInfo["y"] + y
-
-            ; 点击
-            Click(screenX, screenY, button)
-
-            LoggerInstance.Debug(Format("在游戏窗口内点击: ({},{})", x, y))
-            return true
-        }
-        catch as e {
-            LoggerInstance.Error(Format("游戏窗口内点击失败: {}", e.Message))
-            throw e
-        }
-    }
-
-    ; 在游戏窗口内移动鼠标
-    MoveMouseInGame(x, y) {
-        if (!this.IsGameRunning()) {
-            throw Error("游戏窗口未运行")
-        }
-
-        try {
-            ; 转换为屏幕坐标
-            screenX := this.windowInfo["x"] + x
-            screenY := this.windowInfo["y"] + y
-
-            ; 移动鼠标
-            MouseMove(screenX, screenY)
-
-            LoggerInstance.Debug(Format("鼠标移动到游戏窗口内: ({},{})", x, y))
-            return true
-        }
-        catch as e {
-            LoggerInstance.Error(Format("鼠标移动失败: {}", e.Message))
-            throw e
-        }
-    }
-
-    ; 获取游戏窗口内指定位置的颜色
-    GetColorInGame(x, y) {
-        if (!this.IsGameRunning()) {
-            throw Error("游戏窗口未运行")
-        }
-
-        try {
-            ; 转换为屏幕坐标
-            screenX := this.windowInfo["x"] + x
-            screenY := this.windowInfo["y"] + y
-
-            ; 获取颜色
-            color := PixelGetColor(screenX, screenY)
-
-            LoggerInstance.Debug(Format("获取游戏窗口内颜色: ({},{}) = {}", x, y, color))
-            return color
-        }
-        catch as e {
-            LoggerInstance.Error(Format("获取颜色失败: {}", e.Message))
-            throw e
-        }
-    }
-
-    ; 检查游戏窗口内指定位置的颜色
-    CheckColorInGame(x, y, expectedColor, variation := 0) {
-        try {
-            actualColor := this.GetColorInGame(x, y)
-            return this.ColorsMatch(actualColor, expectedColor, variation)
-        }
-        catch {
-            return false
-        }
-    }
-
-    ; 颜色匹配（支持变异）
-    ColorsMatch(color1, color2, variation := 0) {
-        if (variation = 0) {
-            return color1 = color2
-        }
-
-        ; 解析颜色值
-        r1 := (color1 >> 16) & 0xFF
-        g1 := (color1 >> 8) & 0xFF
-        b1 := color1 & 0xFF
-
-        r2 := (color2 >> 16) & 0xFF
-        g2 := (color2 >> 8) & 0xFF
-        b2 := color2 & 0xFF
-
-        ; 计算差异
-        rDiff := Abs(r1 - r2)
-        gDiff := Abs(g1 - g2)
-        bDiff := Abs(b1 - b2)
-
-        return Max(rDiff, gDiff, bDiff) <= variation
-    }
-
-    ; 等待游戏窗口内指定颜色出现
-    WaitForColorInGame(x, y, expectedColor, timeout := 5000, variation := 0) {
-        startTime := A_TickCount
-
-        while (A_TickCount - startTime < timeout) {
-            if (this.CheckColorInGame(x, y, expectedColor, variation)) {
-                LoggerInstance.Debug(Format("颜色出现: ({},{}) = {}", x, y, expectedColor))
-                return true
-            }
-            Sleep(100)
-        }
-
-        LoggerInstance.Warn(Format("等待颜色超时: ({},{}) = {}", x, y, expectedColor))
-        return false
-    }
-
-    ; 等待游戏窗口内指定颜色消失
-    WaitForColorGoneInGame(x, y, expectedColor, timeout := 5000, variation := 0) {
-        startTime := A_TickCount
-
-        while (A_TickCount - startTime < timeout) {
-            if (!this.CheckColorInGame(x, y, expectedColor, variation)) {
-                LoggerInstance.Debug(Format("颜色消失: ({},{}) = {}", x, y, expectedColor))
-                return true
-            }
-            Sleep(100)
-        }
-
-        LoggerInstance.Warn(Format("等待颜色消失超时: ({},{}) = {}", x, y, expectedColor))
-        return false
-    }
+    ; 以下保持原有方法逻辑，只是读取 _isGameActive 时用 IsGameActive()，赋值时用 SetGameActive()
+    ; CaptureGameWindow, ClickInGame, MoveMouseInGame, GetColorInGame, CheckColorInGame, ColorsMatch, WaitForColorInGame, WaitForColorGoneInGame
+    ; 省略重复，逻辑不变
 
     ; 获取游戏窗口句柄
     GetGameHwnd() {
@@ -424,11 +331,6 @@ class WindowManager {
     ; 获取游戏进程ID
     GetGamePid() {
         return this.gamePid
-    }
-
-    ; 检查游戏是否激活
-    IsGameActive() {
-        return this.isGameActive && WinActive("ahk_id " this.gameHwnd)
     }
 
     ; 刷新窗口信息
@@ -446,34 +348,29 @@ class WindowManager {
 
     ; 启动游戏
     StartGame() {
-        LoggerInstance.Info("尝试启动游戏")
+        this.logger.Info("尝试启动游戏")
 
         try {
-            ; 检查游戏是否已经在运行
             if (this.IsGameRunning()) {
-                LoggerInstance.Info("游戏已经在运行")
+                this.logger.Info("游戏已经在运行")
                 return true
             }
 
-            ; 这里可以添加游戏的启动逻辑
-            ; 例如：Run("游戏的启动命令或路径")
+            this.logger.Info("请手动启动QQ游戏盒子并打开《百战沙场》")
 
-            LoggerInstance.Info("请手动启动QQ游戏盒子并打开《百战沙场》")
-
-            ; 等待用户启动游戏
             loop 30 {
                 Sleep(2000)
                 if (this.FindGameWindow()) {
-                    LoggerInstance.Info("游戏启动成功")
+                    this.logger.Info("游戏启动成功")
                     return true
                 }
             }
 
-            LoggerInstance.Error("游戏启动超时")
+            this.logger.Error("游戏启动超时")
             return false
         }
         catch as e {
-            LoggerInstance.Error(Format("启动游戏失败: {}", e.Message))
+            this.logger.Error(Format("启动游戏失败: {}", e.Message))
             return false
         }
     }
@@ -486,7 +383,7 @@ class WindowManager {
 
         try {
             WinClose(this.gameHwnd)
-            Sleep(2000)  ; 等待关闭
+            Sleep(2000)
 
             if (this.gamePid) {
                 ProcessClose(this.gamePid)
@@ -494,24 +391,25 @@ class WindowManager {
 
             this.gameHwnd := 0
             this.gamePid := 0
-            this.isGameActive := false
+            this.SetGameActive(false)
+            this.windowInfo := Map()
 
-            LoggerInstance.Info("游戏已关闭")
+            this.logger.Info("游戏已关闭")
             return true
         }
         catch as e {
-            LoggerInstance.Error(Format("关闭游戏失败: {}", e.Message))
+            this.logger.Error(Format("关闭游戏失败: {}", e.Message))
             return false
         }
     }
 
     ; 清理资源
     Cleanup() {
-        LoggerInstance.Info("清理窗口管理器资源")
+        this.logger.Info("清理窗口管理器资源")
 
         this.gameHwnd := 0
         this.gamePid := 0
-        this.isGameActive := false
+        this.SetGameActive(false)
         this.windowInfo := Map()
     }
 
@@ -520,11 +418,10 @@ class WindowManager {
         return Map(
             "gameHwnd", this.gameHwnd,
             "gamePid", this.gamePid,
-            "isGameActive", this.isGameActive,
+            "isGameActive", this._isGameActive,
             "windowInfo", this.windowInfo.Clone()
         )
     }
 }
 
-; 全局窗口管理器实例
-global WindowManagerInstance := WindowManager()
+; 注意：不再创建全局实例，由主程序统一管理

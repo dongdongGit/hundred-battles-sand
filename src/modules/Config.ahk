@@ -3,8 +3,18 @@
  * 支持INI文件读写、内存配置管理、配置验证
  */
 
+#Requires AutoHotkey v2.0
+
 class Config {
-    __New(configFile := "") {
+    static BOOLEAN_VAILDRULES := ["1", "true", "True", "TRUE", "yes", "Yes", "YES"]
+
+    __New(configFile := "", loggerInstance := "") {
+        ; 如果没有传入日志实例，使用全局实例（向后兼容）
+        if (loggerInstance = "") {
+            loggerInstance := LoggerInstance
+        }
+
+        this.logger := loggerInstance
         this.configFile := configFile || A_ScriptDir "\resources\config\config.ini"
         this.configData := Map()
         this.defaultConfig := this.GetDefaultConfig()
@@ -89,10 +99,10 @@ class Config {
                 }
             }
 
-            LoggerInstance.Info("配置文件加载完成: " this.configFile)
+            this.logger.Info("配置文件加载完成: " this.configFile)
         }
         catch as e {
-            LoggerInstance.Error("加载配置文件失败: " e.Message)
+            this.logger.Error("加载配置文件失败: " e.Message)
             throw e
         }
     }
@@ -113,10 +123,10 @@ class Config {
             }
 
             this.isDirty := false
-            LoggerInstance.Info("配置文件保存完成: " this.configFile)
+            this.logger.Info("配置文件保存完成: " this.configFile)
         }
         catch as e {
-            LoggerInstance.Error("保存配置文件失败: " e.Message)
+            this.logger.Error("保存配置文件失败: " e.Message)
             throw e
         }
     }
@@ -136,7 +146,7 @@ class Config {
             return Integer(value)
         }
         else if (defaultValue is Boolean) {
-            return value in ["1", "true", "True", "TRUE", "yes", "Yes", "YES"]
+            return this.__Class.BOOLEAN_VAILDRULES.Has(value)
         }
         else {
             return String(value)
@@ -214,7 +224,7 @@ class Config {
 
     GetBool(section, key, defaultValue := false) {
         value := this.Get(section, key, defaultValue)
-        return Type(value) = "String" ? value in ["1", "true", "True", "TRUE", "yes", "Yes", "YES"] : !!value
+        return Type(value) = "String" ? this.__Class.BOOLEAN_VAILDRULES.Has(value) : !!value
     }
 
     GetFloat(section, key, defaultValue := 0.0) {
@@ -325,5 +335,4 @@ class Config {
     }
 }
 
-; 全局配置实例
-global ConfigInstance := Config()
+; 注意：不再创建全局实例，由主程序统一管理

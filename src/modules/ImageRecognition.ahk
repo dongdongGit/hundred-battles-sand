@@ -3,42 +3,65 @@
  * 处理游戏界面的图像识别、按钮定位、文字识别等功能
  */
 
+#Requires AutoHotkey v2.0
+
 class ImageRecognition {
-    __New() {
-        this.templatePath := ConfigInstance.GetString("recognition", "template_path")
-        this.confidenceThreshold := ConfigInstance.GetFloat("recognition", "confidence_threshold")
-        this.maxSearchTime := ConfigInstance.GetInt("recognition", "max_search_time")
-        this.useGrayscale := ConfigInstance.GetBool("recognition", "use_grayscale")
-        this.enableTextRecognition := ConfigInstance.GetBool("recognition", "enable_text_recognition")
+    __New(configInstance := "", windowManagerInstance := "") {
+        ; 如果没有传入配置实例，使用全局实例（向后兼容）
+        if (configInstance = "") {
+            configInstance := ConfigInstance
+        }
+        if (windowManagerInstance = "") {
+            windowManagerInstance := WindowManagerInstance
+        }
+
+        this.config := configInstance
+        this.windowManager := windowManagerInstance
+        this.logger := Logger()
+
+        ; 获取模板路径并确保是绝对路径
+        templatePath := this.config.GetString("recognition", "template_path")
+        if (!InStr(templatePath, ":") && !InStr(templatePath, "\\")) {
+            ; 相对路径，转为绝对路径
+            templatePath := A_ScriptDir "\" templatePath
+        }
+        this.templatePath := templatePath
+        this.confidenceThreshold := this.config.GetFloat("recognition", "confidence_threshold")
+        this.maxSearchTime := this.config.GetInt("recognition", "max_search_time")
+        this.useGrayscale := this.config.GetBool("recognition", "use_grayscale")
+        this.enableTextRecognition := this.config.GetBool("recognition", "enable_text_recognition")
 
         this.templates := Map()
         this.isInitialized := false
     }
 
     Initialize() {
-        LoggerInstance.Info("初始化图像识别模块")
+        this.logger.Info("初始化图像识别模块")
 
         try {
             ; 确保模板目录存在
             if (!DirExist(this.templatePath)) {
                 DirCreate(this.templatePath)
-                LoggerInstance.Info("创建模板目录: " this.templatePath)
+                this.logger.Info("创建模板目录: " this.templatePath)
+            }
+            else {
+                this.logger.Debug("模板目录已存在: " this.templatePath)
             }
 
             ; 加载模板图片
             this.LoadTemplates()
 
             this.isInitialized := true
-            LoggerInstance.Info("图像识别模块初始化完成")
+            this.logger.Info("图像识别模块初始化完成")
         }
         catch as e {
-            LoggerInstance.Error(Format("图像识别模块初始化失败: {}", e.Message))
+            this.logger.Error(Format("图像识别模块初始化失败: {}", e.Message))
             throw e
         }
     }
 
     LoadTemplates() {
-        LoggerInstance.Debug("加载图像模板")
+        this.logger.Debug("加载图像模板")
 
         ; 遍历模板目录加载图片
         if (DirExist(this.templatePath)) {
@@ -53,20 +76,20 @@ class ImageRecognition {
                             "height", 0
                         )
 
-                        LoggerInstance.Debug(Format("加载模板: {} -> {}", templateName, A_LoopFileFullPath))
+                        this.logger.Debug(Format("加载模板: {} -> {}", templateName, A_LoopFileFullPath))
                     }
                     catch as e {
-                        LoggerInstance.Warn(Format("加载模板失败 {}: {}", A_LoopFileName, e.Message))
+                        this.logger.Warn(Format("加载模板失败 {}: {}", A_LoopFileName, e.Message))
                     }
                 }
             }
         }
 
-        LoggerInstance.Info(Format("模板加载完成，共加载 {} 个模板", this.templates.Count))
+        this.logger.Info(Format("模板加载完成，共加载 {} 个模板", this.templates.Count))
     }
 
     ; 在游戏窗口中查找图像
-    FindImage(templateName, ByRef foundX, ByRef foundY, searchArea := "") {
+    FindImage(templateName, &foundX, &foundY, searchArea := "") {
         if (!this.isInitialized) {
             throw Error("图像识别模块未初始化")
         }
@@ -80,7 +103,7 @@ class ImageRecognition {
             startTime := A_TickCount
 
             ; 截取游戏窗口
-            bitmap := WindowManagerInstance.CaptureGameWindow()
+            bitmap := this.windowManager.CaptureGameWindow()
 
             ; 加载模板图片
             if (!template["bitmap"]) {
@@ -101,14 +124,14 @@ class ImageRecognition {
             GdipDisposeImage(bitmap)
 
             if (searchResult) {
-                LoggerInstance.Debug(Format(
+                this.logger.Debug(Format(
                     "图像识别成功: {} at ({},{}) 耗时: {}ms",
                     templateName, foundX, foundY, A_TickCount - startTime
                 ))
                 return true
             }
             else {
-                LoggerInstance.Debug(Format(
+                this.logger.Debug(Format(
                     "图像识别失败: {} 耗时: {}ms",
                     templateName, A_TickCount - startTime
                 ))
@@ -116,7 +139,7 @@ class ImageRecognition {
             }
         }
         catch as e {
-            LoggerInstance.Error(Format("图像识别出错: {}", e.Message))
+            this.logger.Error(Format("图像识别出错: {}", e.Message))
             return false
         }
     }
@@ -227,12 +250,12 @@ class ImageRecognition {
     WaitForImage(templateName, timeout := 10000, searchArea := "") {
         startTime := A_TickCount
 
-        LoggerInstance.Debug(Format("等待图像出现: {} 超时: {}ms", templateName, timeout))
+        this.logger.Debug(Format("等待图像出现: {} 超时: {}ms", templateName, timeout))
 
         while (A_TickCount - startTime < timeout) {
             try {
                 if (this.FindImage(templateName, &foundX, &foundY, searchArea)) {
-                    LoggerInstance.Info(Format("图像出现: {} at ({},{})", templateName, foundX, foundY))
+                    this.logger.Info(Format("图像出现: {} at ({},{})", templateName, foundX, foundY))
                     return true
                 }
             }
@@ -243,7 +266,7 @@ class ImageRecognition {
             Sleep(500)  ; 每500ms检查一次
         }
 
-        LoggerInstance.Warn(Format("等待图像超时: {}", templateName))
+        this.logger.Warn(Format("等待图像超时: {}", templateName))
         return false
     }
 
@@ -251,12 +274,12 @@ class ImageRecognition {
     WaitForImageGone(templateName, timeout := 10000, searchArea := "") {
         startTime := A_TickCount
 
-        LoggerInstance.Debug(Format("等待图像消失: {} 超时: {}ms", templateName, timeout))
+        this.logger.Debug(Format("等待图像消失: {} 超时: {}ms", templateName, timeout))
 
         while (A_TickCount - startTime < timeout) {
             try {
                 if (!this.FindImage(templateName, &foundX, &foundY, searchArea)) {
-                    LoggerInstance.Info(Format("图像消失: {}", templateName))
+                    this.logger.Info(Format("图像消失: {}", templateName))
                     return true
                 }
             }
@@ -268,7 +291,7 @@ class ImageRecognition {
             Sleep(500)
         }
 
-        LoggerInstance.Warn(Format("等待图像消失超时: {}", templateName))
+        this.logger.Warn(Format("等待图像消失超时: {}", templateName))
         return false
     }
 
@@ -284,19 +307,19 @@ class ImageRecognition {
             clickY := foundY + offsetY
 
             ; 点击
-            WindowManagerInstance.ClickInGame(clickX, clickY)
+            this.windowManager.ClickInGame(clickX, clickY)
 
-            LoggerInstance.Debug(Format("点击图像: {} at ({},{})", templateName, clickX, clickY))
+            this.logger.Debug(Format("点击图像: {} at ({},{})", templateName, clickX, clickY))
             return true
         }
         catch as e {
-            LoggerInstance.Error(Format("点击图像失败: {}", e.Message))
+            this.logger.Error(Format("点击图像失败: {}", e.Message))
             return false
         }
     }
 
     ; 多图像识别（查找多个模板中的任意一个）
-    FindAnyImage(templateNames, ByRef foundTemplate, ByRef foundX, ByRef foundY, searchArea := "") {
+    FindAnyImage(templateNames, &foundTemplate, &foundX, &foundY, searchArea := "") {
         for templateName in templateNames {
             if (this.FindImage(templateName, &foundX, &foundY, searchArea)) {
                 foundTemplate := templateName
@@ -310,7 +333,7 @@ class ImageRecognition {
     FindColorInArea(color, x1, y1, x2, y2, variation := 0) {
         try {
             ; 截取指定区域
-            bitmap := WindowManagerInstance.CaptureGameWindow(x1, y1, x2 - x1, y2 - y1)
+            bitmap := this.windowManager.CaptureGameWindow(x1, y1, x2 - x1, y2 - y1)
 
             ; 在位图中查找颜色
             found := false
@@ -322,8 +345,8 @@ class ImageRecognition {
                 loop (x2 - x1) {
                     x := x1 + A_Index - 1
 
-                    pixelColor := WindowManagerInstance.GetColorInGame(x, y)
-                    if (WindowManagerInstance.ColorsMatch(pixelColor, color, variation)) {
+                    pixelColor := this.windowManager.GetColorInGame(x, y)
+                    if (this.windowManager.ColorsMatch(pixelColor, color, variation)) {
                         found := true
                         foundX := x
                         foundY := y
@@ -338,13 +361,13 @@ class ImageRecognition {
             GdipDisposeImage(bitmap)
 
             if (found) {
-                LoggerInstance.Debug(Format("颜色找到: {} at ({},{})", color, foundX, foundY))
+                this.logger.Debug(Format("颜色找到: {} at ({},{})", color, foundX, foundY))
             }
 
             return found
         }
         catch as e {
-            LoggerInstance.Error(Format("颜色识别失败: {}", e.Message))
+            this.logger.Error(Format("颜色识别失败: {}", e.Message))
             return false
         }
     }
@@ -352,18 +375,18 @@ class ImageRecognition {
     ; 文字识别（如果启用）
     RecognizeText(x, y, width, height) {
         if (!this.enableTextRecognition) {
-            LoggerInstance.Warn("文字识别已禁用")
+            this.logger.Warn("文字识别已禁用")
             return ""
         }
 
         try {
             ; 这里可以集成OCR库，如Tesseract
             ; 目前返回空字符串，等待具体实现
-            LoggerInstance.Debug(Format("文字识别区域: ({},{}) {}x{}", x, y, width, height))
+            this.logger.Debug(Format("文字识别区域: ({},{}) {}x{}", x, y, width, height))
             return ""
         }
         catch as e {
-            LoggerInstance.Error(Format("文字识别失败: {}", e.Message))
+            this.logger.Error(Format("文字识别失败: {}", e.Message))
             return ""
         }
     }
@@ -382,11 +405,11 @@ class ImageRecognition {
                 "height", 0
             )
 
-            LoggerInstance.Info(Format("添加模板: {} -> {}", name, imagePath))
+            this.logger.Info(Format("添加模板: {} -> {}", name, imagePath))
             return true
         }
         catch as e {
-            LoggerInstance.Error(Format("添加模板失败: {}", e.Message))
+            this.logger.Error(Format("添加模板失败: {}", e.Message))
             return false
         }
     }
@@ -399,7 +422,7 @@ class ImageRecognition {
                 GdipDisposeImage(template["bitmap"])
             }
             this.templates.Delete(name)
-            LoggerInstance.Info(Format("移除模板: {}", name))
+            this.logger.Info(Format("移除模板: {}", name))
             return true
         }
         return false
@@ -412,7 +435,7 @@ class ImageRecognition {
 
     ; 清理资源
     Cleanup() {
-        LoggerInstance.Info("清理图像识别资源")
+        this.logger.Info("清理图像识别资源")
 
         ; 释放所有位图资源
         for name, template in this.templates {
@@ -437,5 +460,4 @@ class ImageRecognition {
     }
 }
 
-; 全局图像识别实例
-global ImageRecognitionInstance := ImageRecognition()
+; 注意：不再创建全局实例，由主程序统一管理

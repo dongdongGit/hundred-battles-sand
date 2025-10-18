@@ -3,6 +3,8 @@
  * 提供低级键盘鼠标控制功能，支持后台操作
  */
 
+#Requires AutoHotkey v2.0
+
 class InterceptionManager {
     __New() {
         this.isInstalled := false
@@ -257,7 +259,7 @@ class InterceptionManager {
     }
 
     ; 获取鼠标位置
-    GetMousePosition(ByRef x, ByRef y) {
+    GetMousePosition(&x, &y) {
         if (!this.isInitialized) {
             return false
         }
@@ -455,5 +457,4 @@ class InterceptionManager {
     }
 }
 
-; 全局Interception管理器实例
-global InterceptionManagerInstance := InterceptionManager()
+; 注意：不再创建全局实例，由主程序统一管理

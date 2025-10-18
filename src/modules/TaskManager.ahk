@@ -3,20 +3,43 @@
  * 负责任务调度、执行监控、状态管理等核心功能
  */
 
+#Requires AutoHotkey v2.0
+
 class TaskManager {
-    __New() {
+    __New(loggerInstance := "", configInstance := "") {
+        ; 如果没有传入实例，使用全局实例（向后兼容）
+        if (loggerInstance = "") {
+            loggerInstance := LoggerInstance
+        }
+        if (configInstance = "") {
+            configInstance := ConfigInstance
+        }
+
+        this.logger := loggerInstance
+        this.config := configInstance
+
         this.tasks := Map()
         this.runningTasks := Map()
         this.taskQueue := []
-        this.isRunning := false
+        this._isRunning := false
         this.maxConcurrentTasks := 3
         this.taskStats := Map()
 
         this.InitializeDefaultTasks()
     }
 
+    ; Getter
+    IsRunning() {
+        return this._isRunning
+    }
+
+    ; Setter
+    SetRunning(value) {
+        this._isRunning := value
+    }
+
     Initialize() {
-        LoggerInstance.Info("初始化任务管理器")
+        this.logger.Info("初始化任务管理器")
 
         ; 从配置加载任务设置
         this.LoadTaskSettings()
@@ -24,7 +47,7 @@ class TaskManager {
         ; 初始化统计信息
         this.ResetStats()
 
-        LoggerInstance.Info("任务管理器初始化完成")
+        this.logger.Info("任务管理器初始化完成")
     }
 
     InitializeDefaultTasks() {
@@ -91,15 +114,15 @@ class TaskManager {
     }
 
     LoadTaskSettings() {
-        LoggerInstance.Debug("加载任务设置")
+        this.logger.Debug("加载任务设置")
 
         ; 从配置读取任务启用状态
         for taskId, taskInfo in this.defaultTasks {
-            enabled := ConfigInstance.GetBool("tasks", "enable_" taskId, taskInfo["enabled"])
+            enabled := this.config.GetBool("tasks", "enable_" taskId, taskInfo["enabled"])
 
             if (enabled) {
                 this.tasks[taskId] := this.CreateTask(taskId, taskInfo)
-                LoggerInstance.Debug(Format("启用任务: {} - {}", taskId, taskInfo["name"]))
+                this.logger.Debug(Format("启用任务: {} - {}", taskId, taskInfo["name"]))
             }
         }
     }
@@ -125,36 +148,36 @@ class TaskManager {
     }
 
     Start() {
-        if (this.isRunning) {
-            LoggerInstance.Warn("任务管理器已经在运行中")
+        if (this.IsRunning()) {
+            this.logger.Warn("任务管理器已经在运行中")
             return false
         }
 
-        LoggerInstance.Info("启动任务管理器")
+        this.logger.Info("启动任务管理器")
 
-        this.isRunning := true
+        this.SetRunning(true)
         this.ResetStats()
 
         ; 启动任务调度循环
         this.StartScheduler()
 
-        LoggerInstance.Info("任务管理器启动完成")
+        this.logger.Info("任务管理器启动完成")
         return true
     }
 
     Stop() {
-        if (!this.isRunning) {
+        if (!this.IsRunning()) {
             return false
         }
 
-        LoggerInstance.Info("停止任务管理器")
+        this.logger.Info("停止任务管理器")
 
-        this.isRunning := false
+        this.SetRunning(false)
 
         ; 停止所有运行中的任务
         this.StopAllTasks()
 
-        LoggerInstance.Info("任务管理器已停止")
+        this.logger.Info("任务管理器已停止")
         return true
     }
 
@@ -165,7 +188,7 @@ class TaskManager {
     }
 
     SchedulerLoop() {
-        if (!this.isRunning) {
+        if (!this.IsRunning()) {
             return
         }
 
@@ -183,7 +206,7 @@ class TaskManager {
             this.UpdateStats()
         }
         catch as e {
-            LoggerInstance.Error(Format("调度循环出错: {}", e.Message))
+            this.logger.Error(Format("调度循环出错: {}", e.Message))
         }
     }
 
@@ -224,12 +247,12 @@ class TaskManager {
     }
 
     CheckDailyLimit(task) {
-        maxRuns := ConfigInstance.GetInt("tasks", "max_daily_runs", 10)
+        maxRuns := this.config.GetInt("tasks", "max_daily_runs", 10)
 
         ; 这里应该检查今天的执行次数
         ; 简化版：检查总执行次数
         if (task["runCount"] >= maxRuns) {
-            LoggerInstance.Debug(Format("任务 {} 已达到每日最大执行次数", task["name"]))
+            this.logger.Debug(Format("任务 {} 已达到每日最大执行次数", task["name"]))
             return true
         }
 
@@ -244,7 +267,7 @@ class TaskManager {
 
         this.runningTasks[taskId] := task
 
-        LoggerInstance.Info(Format("开始执行任务: {}", task["name"]))
+        this.logger.Info(Format("开始执行任务: {}", task["name"]))
 
         ; 执行任务（异步）
         this.ExecuteTask(taskId)
@@ -262,10 +285,16 @@ class TaskManager {
 
     TaskExecutor(taskId) {
         try {
+            ; 检查任务是否存在
+            if (!this.tasks.Has(taskId)) {
+                this.logger.Error(Format("任务不存在: {}", taskId))
+                return
+            }
+
             task := this.tasks[taskId]
             taskName := task["name"]
 
-            LoggerInstance.Debug(Format("执行任务: {}", taskName))
+            this.logger.Debug(Format("执行任务: {}", taskName))
 
             ; 根据任务类型执行相应操作
             switch taskId {
@@ -292,13 +321,13 @@ class TaskManager {
 
         }
         catch as e {
-            LoggerInstance.Error(Format("任务执行失败 {}: {}", taskId, e.Message))
+            this.logger.Error(Format("任务执行失败 {}: {}", taskId, e.Message))
             this.CompleteTask(taskId, false, e.Message)
         }
     }
 
     ExecuteDailySignin(task) {
-        LoggerInstance.Info("执行每日签到任务")
+        this.logger.Info("执行每日签到任务")
 
         ; 模拟任务执行过程
         Sleep(2000)
@@ -308,39 +337,39 @@ class TaskManager {
         ; 2. 点击签到
         ; 3. 确认奖励领取
 
-        LoggerInstance.Info("每日签到完成")
+        this.logger.Info("每日签到完成")
     }
 
     ExecuteDailyTasks(task) {
-        LoggerInstance.Info("执行日常任务")
+        this.logger.Info("执行日常任务")
 
         ; 模拟任务执行
         Sleep(3000)
 
-        LoggerInstance.Info("日常任务完成")
+        this.logger.Info("日常任务完成")
     }
 
     ExecuteResourceCollection(task) {
-        LoggerInstance.Info("执行资源采集任务")
+        this.logger.Info("执行资源采集任务")
 
         Sleep(5000)
 
-        LoggerInstance.Info("资源采集完成")
+        this.logger.Info("资源采集完成")
     }
 
     ExecuteEquipmentUpgrade(task) {
-        LoggerInstance.Info("执行装备强化任务")
+        this.logger.Info("执行装备强化任务")
 
         Sleep(4000)
 
-        LoggerInstance.Info("装备强化完成")
+        this.logger.Info("装备强化完成")
     }
 
     ExecuteHangupFarming(task) {
-        LoggerInstance.Info("开始挂机刷元宝")
+        this.logger.Info("开始挂机刷元宝")
 
         ; 挂机任务持续时间（从配置读取）
-        duration := ConfigInstance.GetInt("tasks", "hangup_duration", 3600) * 1000
+        duration := this.config.GetInt("tasks", "hangup_duration", 3600) * 1000
 
         startTime := A_TickCount
         while (A_TickCount - startTime < duration && this.isRunning) {
@@ -353,52 +382,58 @@ class TaskManager {
             ; 4. 处理异常情况
         }
 
-        LoggerInstance.Info("挂机刷元宝完成")
+        this.logger.Info("挂机刷元宝完成")
     }
 
     ExecuteFriendInteraction(task) {
-        LoggerInstance.Info("执行好友互动任务")
+        this.logger.Info("执行好友互动任务")
 
         Sleep(3000)
 
-        LoggerInstance.Info("好友互动完成")
+        this.logger.Info("好友互动完成")
     }
 
     ExecuteDemonPurge(task) {
-        LoggerInstance.Info("开始执行除魔任务")
+        this.logger.Info("开始执行除魔任务")
 
         try {
-            ; 创建除魔任务实例
-            demonPurgeTask := DemonPurgeTask()
+            ; 创建除魔任务实例（使用依赖注入）
+            demonPurgeTask := DemonPurgeTask(this.logger, this.config)
 
             ; 执行除魔任务流程
             success := demonPurgeTask.ExecuteFullCycle()
 
             if (success) {
-                LoggerInstance.Info("除魔任务执行完成")
+                this.logger.Info("除魔任务执行完成")
             }
             else {
-                LoggerInstance.Warn("除魔任务执行失败或无需执行")
+                this.logger.Warn("除魔任务执行失败或无需执行")
             }
         }
         catch as e {
-            LoggerInstance.Error(Format("除魔任务执行出错: {}", e.Message))
+            this.logger.Error(Format("除魔任务执行出错: {}", e.Message))
             throw e
         }
     }
 
     CompleteTask(taskId, success, errorMsg := "") {
+        ; 检查任务是否存在
+        if (!this.tasks.Has(taskId)) {
+            this.logger.Error(Format("任务不存在: {}", taskId))
+            return false
+        }
+
         task := this.tasks[taskId]
 
         if (success) {
             task["status"] := "completed"
             task["successCount"]++
-            LoggerInstance.Info(Format("任务完成: {}", task["name"]))
+            this.logger.Info(Format("任务完成: {}", task["name"]))
         }
         else {
             task["status"] := "failed"
             task["failCount"]++
-            LoggerInstance.Error(Format("任务失败: {} - {}", task["name"], errorMsg))
+            this.logger.Error(Format("任务失败: {} - {}", task["name"], errorMsg))
         }
 
         task["runCount"]++
@@ -414,10 +449,11 @@ class TaskManager {
 
         ; 更新统计
         this.UpdateTaskStats(taskId, success)
+        return true
     }
 
     StopAllTasks() {
-        LoggerInstance.Info("停止所有运行中的任务")
+        this.logger.Info("停止所有运行中的任务")
 
         for taskId, task in this.runningTasks.Clone() {
             this.StopTask(taskId)
@@ -434,7 +470,7 @@ class TaskManager {
 
         this.runningTasks.Delete(taskId)
 
-        LoggerInstance.Info(Format("停止任务: {}", task["name"]))
+        this.logger.Info(Format("停止任务: {}", task["name"]))
         return true
     }
 
@@ -446,7 +482,7 @@ class TaskManager {
             if (task["timeout"] > 0) {
                 elapsed := (currentTime - task["startTime"]) / 1000
                 if (elapsed > task["timeout"]) {
-                    LoggerInstance.Warn(Format("任务超时: {}", task["name"]))
+                    this.logger.Warn(Format("任务超时: {}", task["name"]))
                     this.CompleteTask(taskId, false, "任务执行超时")
                 }
             }
@@ -515,7 +551,7 @@ class TaskManager {
     EnableTask(taskId, enabled := true) {
         if (this.tasks.Has(taskId)) {
             this.tasks[taskId]["enabled"] := enabled
-            LoggerInstance.Info(Format("任务 {} {}", taskId, enabled ? "已启用" : "已禁用"))
+            this.logger.Info(Format("任务 {} {}", taskId, enabled ? "已启用" : "已禁用"))
             return true
         }
         return false
@@ -533,7 +569,7 @@ class TaskManager {
     SetTaskPriority(taskId, priority) {
         if (this.tasks.Has(taskId)) {
             this.tasks[taskId]["priority"] := priority
-            LoggerInstance.Info(Format("任务 {} 优先级设为 {}", taskId, priority))
+            this.logger.Info(Format("任务 {} 优先级设为 {}", taskId, priority))
             return true
         }
         return false
@@ -544,7 +580,7 @@ class TaskManager {
         if (!this.tasks.Has(taskId)) {
             task := this.CreateTask(taskId, taskInfo)
             this.tasks[taskId] := task
-            LoggerInstance.Info(Format("添加自定义任务: {}", taskId))
+            this.logger.Info(Format("添加自定义任务: {}", taskId))
             return true
         }
         return false
@@ -559,7 +595,7 @@ class TaskManager {
             }
 
             this.tasks.Delete(taskId)
-            LoggerInstance.Info(Format("移除任务: {}", taskId))
+            this.logger.Info(Format("移除任务: {}", taskId))
             return true
         }
         return false
@@ -567,9 +603,9 @@ class TaskManager {
 
     ; 暂停/恢复任务管理器
     Pause() {
-        if (this.isRunning) {
-            this.isRunning := false
-            LoggerInstance.Info("任务管理器已暂停")
+        if (this.IsRunning()) {
+            this.SetRunning(false)
+            this.logger.Info("任务管理器已暂停")
             return true
         }
         return false
@@ -577,16 +613,11 @@ class TaskManager {
 
     Resume() {
         if (!this.isRunning) {
-            this.isRunning := true
-            LoggerInstance.Info("任务管理器已恢复")
+            this.SetRunning(true)
+            this.logger.Info("任务管理器已恢复")
             return true
         }
         return false
-    }
-
-    ; 检查任务管理器状态
-    IsRunning() {
-        return this.isRunning
     }
 
     ; 获取运行状态
@@ -601,7 +632,7 @@ class TaskManager {
 
     ; 清理资源
     Cleanup() {
-        LoggerInstance.Info("清理任务管理器资源")
+        this.logger.Info("清理任务管理器资源")
 
         this.Stop()
 
@@ -641,5 +672,4 @@ class TaskManager {
     }
 }
 
-; 全局任务管理器实例
-global TaskManagerInstance := TaskManager()
+; 注意：不再创建全局实例，由主程序统一管理

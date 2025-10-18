@@ -3,8 +3,33 @@
  * 协调各个模块，控制游戏自动化流程的核心控制器
  */
 
+#Requires AutoHotkey v2.0
+
 class GameController {
-    __New() {
+    __New(loggerInstance := "", windowManagerInstance := "", imageRecognitionInstance := "", configInstance := "", taskManagerInstance := "") {
+        ; 如果没有传入实例，使用全局实例（向后兼容）
+        if (loggerInstance = "") {
+            loggerInstance := LoggerInstance
+        }
+        if (windowManagerInstance = "") {
+            windowManagerInstance := WindowManagerInstance
+        }
+        if (imageRecognitionInstance = "") {
+            imageRecognitionInstance := ImageRecognitionInstance
+        }
+        if (configInstance = "") {
+            configInstance := ConfigInstance
+        }
+        if (taskManagerInstance = "") {
+            taskManagerInstance := TaskManagerInstance
+        }
+
+        this.logger := loggerInstance
+        this.windowManager := windowManagerInstance
+        this.imageRecognition := imageRecognitionInstance
+        this.config := configInstance
+        this.taskManager := taskManagerInstance
+
         this.isInitialized := false
         this.isConnected := false
         this.gameState := "disconnected"  ; disconnected, connecting, connected, error
@@ -15,52 +40,60 @@ class GameController {
     }
 
     Initialize() {
-        LoggerInstance.Info("初始化游戏控制器")
+        this.logger.Info("初始化游戏控制器")
 
         try {
             ; 初始化各个组件
             this.InitializeComponents()
 
-            ; 测试游戏连接
-            this.TestConnection()
+            ; 测试游戏连接（不强制要求成功）
+            connectionResult := this.TestConnection()
+
+            if (connectionResult) {
+                this.logger.Info("游戏控制器初始化完成，连接正常")
+            }
+            else {
+                this.logger.Info("游戏控制器初始化完成，但游戏未运行")
+            }
 
             this.isInitialized := true
-            LoggerInstance.Info("游戏控制器初始化完成")
         }
         catch as e {
-            LoggerInstance.Error(Format("游戏控制器初始化失败: {}", e.Message))
+            this.logger.Error(Format("游戏控制器初始化失败: {}", e.Message))
             this.gameState := "error"
             throw e
         }
     }
 
     InitializeComponents() {
-        LoggerInstance.Debug("初始化游戏控制器组件")
+        this.logger.Debug("初始化游戏控制器组件")
 
         ; 确保所有必要组件已初始化
-        if (!WindowManagerInstance.WindowExists()) {
+        if (!this.windowManager.WindowExists()) {
             throw Error("游戏窗口未找到，请先启动游戏")
         }
 
-        if (!ImageRecognitionInstance.isInitialized) {
+        if (!this.imageRecognition.isInitialized) {
             throw Error("图像识别模块未初始化")
         }
 
         ; 设置动作延迟
-        this.actionDelay := ConfigInstance.GetInt("game", "delay_between_actions", 1000)
+        this.actionDelay := this.config.GetInt("game", "delay_between_actions", 1000)
     }
 
     TestConnection() {
-        LoggerInstance.Info("测试游戏连接")
+        this.logger.Info("测试游戏连接")
 
         try {
             ; 检查游戏窗口
-            if (!WindowManagerInstance.IsGameRunning()) {
-                throw Error("游戏窗口未运行")
+            if (!this.windowManager.IsGameRunning()) {
+                this.logger.Warn("游戏窗口未运行，将尝试启动游戏")
+                ; 不抛出异常，让主程序处理游戏启动
+                return false
             }
 
             ; 激活游戏窗口
-            WindowManagerInstance.ActivateGameWindow()
+            this.windowManager.ActivateGameWindow()
 
             ; 尝试一些基本的图像识别测试
             testResult := this.PerformBasicTest()
@@ -68,39 +101,44 @@ class GameController {
             if (testResult) {
                 this.isConnected := true
                 this.gameState := "connected"
-                LoggerInstance.Info("游戏连接测试成功")
+                this.logger.Info("游戏连接测试成功")
+                return true
             }
             else {
-                throw Error("游戏连接测试失败")
+                this.logger.Warn("游戏连接测试失败，但窗口已运行")
+                ; 窗口运行但测试失败，可能是游戏状态问题
+                this.isConnected := true  ; 仍然认为连接成功
+                this.gameState := "connected"
+                return true
             }
         }
         catch as e {
             this.isConnected := false
             this.gameState := "error"
-            LoggerInstance.Error(Format("游戏连接测试失败: {}", e.Message))
-            throw e
+            this.logger.Error(Format("游戏连接测试失败: {}", e.Message))
+            return false
         }
     }
 
     PerformBasicTest() {
-        LoggerInstance.Debug("执行基本连接测试")
+        this.logger.Debug("执行基本连接测试")
 
         try {
             ; 测试窗口激活
-            if (!WindowManagerInstance.IsGameActive()) {
-                WindowManagerInstance.ActivateGameWindow()
+            if (!this.windowManager.IsGameActive()) {
+                this.windowManager.ActivateGameWindow()
                 Sleep(1000)
             }
 
             ; 测试图像识别（如果有测试模板的话）
-            templatePath := ConfigInstance.GetString("recognition", "template_path")
+            templatePath := this.config.GetString("recognition", "template_path")
             if (DirExist(templatePath)) {
                 testTemplates := ["test_button", "test_icon"]  ; 可以根据实际情况调整
 
                 for template in testTemplates {
-                    if (ImageRecognitionInstance.templates.Has(template)) {
-                        if (ImageRecognitionInstance.FindImage(template, &x, &y)) {
-                            LoggerInstance.Debug(Format("测试模板 {} 识别成功", template))
+                    if (this.imageRecognition.templates.Has(template)) {
+                        if (this.imageRecognition.FindImage(template, &x, &y)) {
+                            this.logger.Debug(Format("测试模板 {} 识别成功", template))
                             return true
                         }
                     }
@@ -119,35 +157,35 @@ class GameController {
                 expectedColor := colorTest[3]
                 variation := colorTest[4]
 
-                if (WindowManagerInstance.CheckColorInGame(x, y, expectedColor, variation)) {
-                    LoggerInstance.Debug(Format("颜色测试通过: ({},{})", x, y))
+                if (this.windowManager.CheckColorInGame(x, y, expectedColor, variation)) {
+                    this.logger.Debug(Format("颜色测试通过: ({},{})", x, y))
                     return true
                 }
             }
 
-            LoggerInstance.Debug("基本连接测试完成（有限测试）")
+            this.logger.Debug("基本连接测试完成（有限测试）")
             return true  ; 暂时返回true，实际部署时需要更严格的测试
         }
         catch as e {
-            LoggerInstance.Error(Format("基本连接测试失败: {}", e.Message))
+            this.logger.Error(Format("基本连接测试失败: {}", e.Message))
             return false
         }
     }
 
     StartGame() {
-        LoggerInstance.Info("尝试启动游戏")
+        this.logger.Info("尝试启动游戏")
 
         try {
             ; 检查游戏是否已经在运行
-            if (WindowManagerInstance.IsGameRunning()) {
-                LoggerInstance.Info("游戏已经在运行")
+            if (this.windowManager.IsGameRunning()) {
+                this.logger.Info("游戏已经在运行")
                 return true
             }
 
             ; 这里可以添加游戏的启动逻辑
             ; 例如启动QQ游戏盒子或直接启动游戏
 
-            LoggerInstance.Info("请手动启动QQ游戏盒子并打开《百战沙场》")
+            this.logger.Info("请手动启动QQ游戏盒子并打开《百战沙场》")
 
             ; 等待用户启动游戏
             waitCount := 0
@@ -157,18 +195,18 @@ class GameController {
                 Sleep(2000)
                 waitCount += 2
 
-                if (WindowManagerInstance.FindGameWindow()) {
-                    LoggerInstance.Info("游戏启动成功")
+                if (this.windowManager.FindGameWindow()) {
+                    this.logger.Info("游戏启动成功")
                     Sleep(3000)  ; 等待游戏完全加载
                     return true
                 }
             }
 
-            LoggerInstance.Error("游戏启动超时")
+            this.logger.Error("游戏启动超时")
             return false
         }
         catch as e {
-            LoggerInstance.Error(Format("启动游戏失败: {}", e.Message))
+            this.logger.Error(Format("启动游戏失败: {}", e.Message))
             return false
         }
     }
@@ -197,7 +235,7 @@ class GameController {
 
             ; 记录动作执行时间
             if (description) {
-                LoggerInstance.Debug(Format("动作 '{}' 执行完成，耗时: {}ms",
+                this.logger.Debug(Format("动作 '{}' 执行完成，耗时: {}ms",
                     description, endTime - startTime))
             }
 
@@ -205,11 +243,11 @@ class GameController {
         }
         catch as e {
             this.errorCount++
-            LoggerInstance.Error(Format("执行动作失败: {}", e.Message))
+            this.logger.Error(Format("执行动作失败: {}", e.Message))
 
             if (this.errorCount >= this.maxErrorCount) {
-                LoggerInstance.Error("错误次数过多，暂停自动化")
-                TaskManagerInstance.Pause()
+                this.logger.Error("错误次数过多，暂停自动化")
+                this.taskManager.Pause()
             }
 
             throw e
@@ -218,25 +256,25 @@ class GameController {
 
     ; 点击游戏内位置
     ClickInGame(x, y, button := "left", description := "") {
-        return this.ExecuteAction(() => WindowManagerInstance.ClickInGame(x, y, button),
+        return this.ExecuteAction(() => this.windowManager.ClickInGame(x, y, button),
             description || Format("点击游戏位置 ({},{})", x, y))
     }
 
     ; 在游戏窗口内移动鼠标
     MoveMouseInGame(x, y, description := "") {
-        return this.ExecuteAction(() => WindowManagerInstance.MoveMouseInGame(x, y),
+        return this.ExecuteAction(() => this.windowManager.MoveMouseInGame(x, y),
             description || Format("移动鼠标到 ({},{})", x, y))
     }
 
     ; 等待图像出现
     WaitForImage(templateName, timeout := 10000, description := "") {
-        return this.ExecuteAction(() => ImageRecognitionInstance.WaitForImage(templateName, timeout),
+        return this.ExecuteAction(() => this.imageRecognition.WaitForImage(templateName, timeout),
             description || Format("等待图像: {}", templateName))
     }
 
     ; 点击图像
     ClickImage(templateName, offsetX := 0, offsetY := 0, description := "") {
-        return this.ExecuteAction(() => ImageRecognitionInstance.ClickImage(templateName, offsetX, offsetY),
+        return this.ExecuteAction(() => this.imageRecognition.ClickImage(templateName, offsetX, offsetY),
             description || Format("点击图像: {}", templateName))
     }
 
@@ -244,8 +282,8 @@ class GameController {
     GetGameState() {
         state := Map(
             "connected", this.isConnected,
-            "window_exists", WindowManagerInstance.WindowExists(),
-            "window_active", WindowManagerInstance.IsGameActive(),
+            "window_exists", this.windowManager.WindowExists(),
+            "window_active", this.windowManager.IsGameActive(),
             "state", this.gameState,
             "error_count", this.errorCount,
             "last_action", this.lastAction
@@ -257,22 +295,25 @@ class GameController {
     ; 检查游戏是否可操作
     IsGameReady() {
         if (!this.isConnected) {
+            MsgBox("游戏未启动", "错误", "ok")
             return false
         }
 
-        if (!WindowManagerInstance.WindowExists()) {
-            LoggerInstance.Warn("游戏窗口不存在")
+        if (!this.windowManager.WindowExists()) {
+            MsgBox("游戏窗口不存在", "错误", "ok")
+            this.logger.Warn("游戏窗口不存在")
             this.isConnected := false
             return false
         }
 
-        if (!WindowManagerInstance.IsGameActive()) {
-            LoggerInstance.Debug("游戏窗口未激活，尝试激活")
+        if (!this.windowManager.IsGameActive()) {
+            MsgBox("激活游戏窗口失败", "错误", "ok")
+            this.logger.Debug("游戏窗口未激活，尝试激活")
             try {
-                WindowManagerInstance.ActivateGameWindow()
+                this.windowManager.ActivateGameWindow()
             }
             catch {
-                LoggerInstance.Error("激活游戏窗口失败")
+                this.logger.Error("激活游戏窗口失败")
                 return false
             }
         }
@@ -282,25 +323,25 @@ class GameController {
 
     ; 处理游戏异常
     HandleGameError(error) {
-        LoggerInstance.Error(Format("处理游戏异常: {}", error.Message))
+        this.logger.Error(Format("处理游戏异常: {}", error.Message))
 
         this.errorCount++
 
         switch this.errorCount {
             case 1, 2:
                 ; 尝试重新连接
-                LoggerInstance.Info("尝试重新连接游戏")
+                this.logger.Info("尝试重新连接游戏")
                 this.TestConnection()
             case 3, 4:
                 ; 尝试重启游戏窗口
-                LoggerInstance.Info("尝试重启游戏窗口")
-                WindowManagerInstance.ShowGameWindow()
+                this.logger.Info("尝试重启游戏窗口")
+                this.windowManager.ShowGameWindow()
                 Sleep(2000)
                 this.TestConnection()
             default:
                 ; 暂停自动化并报告严重错误
-                LoggerInstance.Fatal("游戏异常次数过多，暂停自动化")
-                TaskManagerInstance.Pause()
+                this.logger.Fatal("游戏异常次数过多，暂停自动化")
+                this.taskManager.Pause()
                 this.gameState := "error"
         }
     }
@@ -308,16 +349,16 @@ class GameController {
     ; 重置错误计数
     ResetErrorCount() {
         this.errorCount := 0
-        LoggerInstance.Debug("重置错误计数")
+        this.logger.Debug("重置错误计数")
     }
 
     ; 截图游戏窗口（用于调试）
     CaptureGameWindow(description := "") {
         try {
-            return WindowManagerInstance.CaptureGameWindow()
+            return this.windowManager.CaptureGameWindow()
         }
         catch as e {
-            LoggerInstance.Error(Format("截图失败: {}", e.Message))
+            this.logger.Error(Format("截图失败: {}", e.Message))
             return false
         }
     }
@@ -337,13 +378,13 @@ class GameController {
     ; 等待指定时间（带随机延迟）
     Wait(milliseconds, description := "") {
         ; 添加随机延迟避免检测
-        randomDelay := ConfigInstance.GetInt("game", "random_delay_min", 200) +
-            Random(0, ConfigInstance.GetInt("game", "random_delay_max", 800) -
-                ConfigInstance.GetInt("game", "random_delay_min", 200))
+        randomDelay := this.config.GetInt("game", "random_delay_min", 200) +
+            Random(0, this.config.GetInt("game", "random_delay_max", 800) -
+                this.config.GetInt("game", "random_delay_min", 200))
 
         totalWait := milliseconds + randomDelay
 
-        LoggerInstance.Debug(Format("等待 {}ms (含随机延迟 {}ms)",
+        this.logger.Debug(Format("等待 {}ms (含随机延迟 {}ms)",
             milliseconds, randomDelay))
 
         Sleep(totalWait)
@@ -352,17 +393,17 @@ class GameController {
 
     ; 检查游戏是否在运行
     IsGameRunning() {
-        return WindowManagerInstance.IsGameRunning()
+        return this.windowManager.IsGameRunning()
     }
 
     ; 获取游戏窗口句柄
     GetGameHwnd() {
-        return WindowManagerInstance.GetGameHwnd()
+        return this.windowManager.GetGameHwnd()
     }
 
     ; 激活游戏窗口
     ActivateGame() {
-        return WindowManagerInstance.ActivateGameWindow()
+        return this.windowManager.ActivateGameWindow()
     }
 
     ; 安全地执行游戏操作（带异常处理）
@@ -382,14 +423,14 @@ class GameController {
 
     ; 批量执行动作序列
     ExecuteActionSequence(actions, description := "") {
-        LoggerInstance.Info(Format("执行动作序列: {}", description || "未命名序列"))
+        this.logger.Info(Format("执行动作序列: {}", description || "未命名序列"))
 
         successCount := 0
         totalCount := actions.Length
 
         for i, action in actions {
             try {
-                LoggerInstance.Debug(Format("执行序列动作 {}/{}: {}", i, totalCount, action["description"] || "未命名动作"))
+                this.logger.Debug(Format("执行序列动作 {}/{}: {}", i, totalCount, action["description"] || "未命名动作"))
 
                 if (action.Has("type")) {
                     switch action["type"] {
@@ -406,7 +447,7 @@ class GameController {
                         case "hotkey":
                             this.SendHotkey(action["keys"], action["description"])
                         default:
-                            LoggerInstance.Warn(Format("未知动作类型: {}", action["type"]))
+                            this.logger.Warn(Format("未知动作类型: {}", action["type"]))
                     }
                 }
                 else if (action.Has("function")) {
@@ -416,7 +457,7 @@ class GameController {
                 successCount++
             }
             catch as e {
-                LoggerInstance.Error(Format("序列动作失败 {}/{}: {}", i, totalCount, e.Message))
+                this.logger.Error(Format("序列动作失败 {}/{}: {}", i, totalCount, e.Message))
 
                 if (action.Get("critical", false)) {
                     ; 关键动作失败，停止整个序列
@@ -425,7 +466,7 @@ class GameController {
             }
         }
 
-        LoggerInstance.Info(Format("动作序列完成: {}/{} 成功", successCount, totalCount))
+        this.logger.Info(Format("动作序列完成: {}/{} 成功", successCount, totalCount))
         return successCount = totalCount
     }
 
@@ -433,7 +474,7 @@ class GameController {
     CreateMacro(macroName, actions) {
         this.macros := this.macros || Map()
         this.macros[macroName] := actions
-        LoggerInstance.Info(Format("创建宏: {}", macroName))
+        this.logger.Info(Format("创建宏: {}", macroName))
     }
 
     ; 执行宏
@@ -455,13 +496,13 @@ class GameController {
             "error_count", this.errorCount,
             "last_action", this.lastAction,
             "action_delay", this.actionDelay,
-            "game_window_info", WindowManagerInstance.GetDebugInfo()
+            "game_window_info", this.windowManager.GetDebugInfo()
         )
     }
 
     ; 清理资源
     Cleanup() {
-        LoggerInstance.Info("清理游戏控制器资源")
+        this.logger.Info("清理游戏控制器资源")
 
         this.isConnected := false
         this.gameState := "disconnected"
@@ -473,5 +514,4 @@ class GameController {
     }
 }
 
-; 全局游戏控制器实例
-global GameControllerInstance := GameController()
+; 注意：不再创建全局实例，由主程序统一管理

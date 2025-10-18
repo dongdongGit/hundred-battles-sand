@@ -19,8 +19,6 @@ global AppName := "百战沙场自动化"
 global AppVersion := "1.0.0"
 global ConfigFile := A_ScriptDir "\..\resources\config\config.ini"
 global LogFile := A_ScriptDir "\..\logs\app.log"
-global GameWindowClass := "MainView_9F956014-12FC-42d8-80C7-9A90D4D567E3"
-global GameWindowTitle := "百战沙场"
 
 ; 包含模块
 #Include "modules\Logger.ahk"
@@ -28,21 +26,24 @@ global GameWindowTitle := "百战沙场"
 #Include "modules\WindowManager.ahk"
 #Include "modules\GameController.ahk"
 #Include "modules\ImageRecognition.ahk"
+#Include "modules\DemonPurgeTemplates.ahk"
 #Include "modules\TaskManager.ahk"
 #Include "modules\DemonPurgeTask.ahk"
-#Include "modules\DemonPurgeTemplates.ahk"
 #Include "utils\DemonPurgeTest.ahk"
 #Include "gui\MainGUI.ahk"
 
 class AutomationApp {
     __New() {
+        ; 创建核心组件
         this.Logger := Logger()
-        this.Config := Config()
-        this.WindowManager := WindowManager()
-        this.GameController := GameController()
-        this.ImageRecognition := ImageRecognition()
-        this.TaskManager := TaskManager()
-        this.MainGUI := MainGUI()
+        this.Config := Config("", this.Logger)
+
+        ; 创建依赖于Config的组件
+        this.WindowManager := WindowManager(this.Config, this.Logger)
+        this.ImageRecognition := ImageRecognition(this.Config, this.WindowManager)
+        this.TaskManager := TaskManager(this.Logger, this.Config)
+        this.GameController := GameController(this.Logger, this.WindowManager, this.ImageRecognition, this.Config, this.TaskManager)
+        this.MainGUI := MainGUI(this.Logger, this.Config)
 
         ; 初始化日志
         this.Logger.Info(Format("{} v{} 启动中...", AppName, AppVersion))
@@ -89,8 +90,15 @@ class AutomationApp {
             if (!this.WindowManager.IsGameRunning()) {
                 this.Logger.Warn("游戏窗口未找到，尝试启动游戏")
                 if (!this.GameController.StartGame()) {
-                    throw Error("无法启动游戏，请手动打开游戏")
+                    this.Logger.Info("请手动启动QQ游戏盒子并打开《百战沙城》，然后重新开始自动化")
+                    this.MainGUI.ShowInfo("游戏未运行", "请手动启动QQ游戏盒子并打开《百战沙城》，然后重新开始自动化")
+                    return
                 }
+            }
+
+            ; 测试游戏连接
+            if (!this.GameController.TestConnection()) {
+                this.Logger.Info("游戏连接测试失败，但窗口已运行。将继续执行任务")
             }
 
             ; 激活游戏窗口

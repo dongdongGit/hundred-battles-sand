@@ -3,6 +3,8 @@
  * 支持多级别日志记录、文件输出、控制台输出
  */
 
+#Requires AutoHotkey v2.0
+
 class Logger {
     static Levels := Map(
         "DEBUG", 0,
@@ -176,8 +178,7 @@ class Logger {
     }
 }
 
-; 全局日志实例
-global LoggerInstance := Logger()
+; 注意：不再创建全局实例，由主程序统一管理
 
 ; 便捷函数
 LogDebug(message) => LoggerInstance.Debug(message)

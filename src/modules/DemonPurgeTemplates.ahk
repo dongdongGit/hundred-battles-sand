@@ -3,6 +3,8 @@
  * 处理除魔任务相关的图像识别模板和规则
  */
 
+#Requires AutoHotkey v2.0
+
 class DemonPurgeTemplates {
     __New() {
         this.templatePath := A_ScriptDir "\..\resources\templates\demon_purge"
@@ -227,7 +229,7 @@ class DemonPurgeTemplates {
     }
 
     ; 查找图像模板
-    FindTemplate(templateName, ByRef foundX, ByRef foundY) {
+    FindTemplate(templateName, &foundX, &foundY) {
         if (!this.isInitialized) {
             throw Error("除魔任务模板管理器未初始化")
         }
@@ -409,5 +411,4 @@ class DemonPurgeTemplates {
     }
 }
 
-; 全局除魔任务模板管理器实例
-global DemonPurgeTemplatesInstance := DemonPurgeTemplates()
+; 注意：不再创建全局实例，由主程序统一管理
