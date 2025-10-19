@@ -69,11 +69,12 @@ class Logger {
             return
 
         ; 备份旧日志文件
-        for i in Range(this.backupCount, 1, -1) {
+        loop this.backupCount {
+            i := this.backupCount - A_Index + 1
             oldFile := this.logFile "." i
             newFile := this.logFile "." (i + 1)
             if (FileExist(oldFile))
-                FileMove(oldFile, newFile, true)
+                FileMove(oldFile, newFile, 1)  ; overwrite = true
         }
 
         ; 移动当前日志文件
@@ -132,7 +133,7 @@ class Logger {
             this.WriteToConsole(message)
             this.WriteToFile(message)
         }
-        this.logQueue.Clear()
+        this.logQueue := []
     }
 
     Debug(message) {
@@ -180,9 +181,5 @@ class Logger {
 
 ; 注意：不再创建全局实例，由主程序统一管理
 
-; 便捷函数
-LogDebug(message) => LoggerInstance.Debug(message)
-LogInfo(message) => LoggerInstance.Info(message)
-LogWarn(message) => LoggerInstance.Warn(message)
-LogError(message) => LoggerInstance.Error(message)
-LogFatal(message) => LoggerInstance.Fatal(message)
+; 注意：便捷函数已被禁用，因为全局实例已被移除
+; 如果需要使用，请通过App.Logger访问

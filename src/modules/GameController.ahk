@@ -174,39 +174,51 @@ class GameController {
 
     StartGame() {
         this.logger.Info("尝试启动游戏")
+        ToolTip("正在检查游戏是否已运行...")
+        Sleep(1000)
 
         try {
             ; 检查游戏是否已经在运行
             if (this.windowManager.IsGameRunning()) {
                 this.logger.Info("游戏已经在运行")
+                ToolTip("游戏已经在运行")
+                Sleep(1000)
+                ToolTip("")
                 return true
             }
 
             ; 这里可以添加游戏的启动逻辑
-            ; 例如启动QQ游戏盒子或直接启动游戏
+            ; 例如启动QQ游戏或直接启动游戏
 
-            this.logger.Info("请手动启动QQ游戏盒子并打开《百战沙场》")
+            this.logger.Info("请手动启动QQ游戏并打开《百战沙城》")
+            ToolTip("请手动启动QQ游戏并打开《百战沙城》...")
+            Sleep(2000)
 
             ; 等待用户启动游戏
             waitCount := 0
             maxWait := 60  ; 最多等待60秒
 
             while (waitCount < maxWait) {
+                ToolTip(Format("等待游戏启动中... {}秒", waitCount))
                 Sleep(2000)
                 waitCount += 2
 
                 if (this.windowManager.FindGameWindow()) {
                     this.logger.Info("游戏启动成功")
+                    ToolTip("游戏启动成功！正在等待游戏完全加载...")
                     Sleep(3000)  ; 等待游戏完全加载
+                    ToolTip("")
                     return true
                 }
             }
 
             this.logger.Error("游戏启动超时")
+            ToolTip("")
             return false
         }
         catch as e {
             this.logger.Error(Format("启动游戏失败: {}", e.Message))
+            ToolTip("")
             return false
         }
     }

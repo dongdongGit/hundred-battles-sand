@@ -9,7 +9,7 @@
 class WindowDetector {
     __New() {
         this.windows := []
-        this.targetKeywords := ["百战沙场", "MainView", "QQMicroGameBox", "QQ游戏", "游戏盒子"]
+        this.targetKeywords := ["百战沙城", "MainView", "QQMicroGameBox", "QQ游戏", "游戏盒子"]
     }
 
     ; 扫描所有窗口
@@ -75,11 +75,11 @@ class WindowDetector {
     SortByRelevance(windows) {
         sorted := []
 
-        ; 优先级：标题包含"百战沙场" > 标题包含其他游戏关键词 > 类名匹配 > 进程名匹配
+        ; 优先级：标题包含"百战沙城" > 标题包含其他游戏关键词 > 类名匹配 > 进程名匹配
         for window in windows {
             relevance := 0
 
-            if (InStr(window["title"], "百战沙场")) {
+            if (InStr(window["title"], "百战沙城")) {
                 relevance += 100
             }
             if (window["isGameRelated"]) {

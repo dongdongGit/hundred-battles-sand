@@ -1,6 +1,6 @@
 /**
  * 窗口管理器
- * 专门处理QQ游戏盒子和游戏窗口的识别、控制和管理
+ * 专门处理QQ游戏和游戏窗口的识别、控制和管理
  */
 
 #Requires AutoHotkey v2.0
@@ -75,21 +75,14 @@ class WindowManager {
             return true
         }
 
-        ; 方法3：通过关键词查找窗口标题
+        ; 方法2.5：通过模糊标题匹配
         gameHwnd := 0
         try {
             windows := WinGetList()
             for hwnd in windows {
                 try {
                     title := WinGetTitle(hwnd)
-                    class := WinGetClass(hwnd)
-
-                    ; 检查是否是游戏相关窗口
-                    if (class = this.gameWindowClass
-                        || InStr(title, "百战沙城")
-                        || InStr(title, "百战沙场")
-                        || InStr(title, "QQ游戏")
-                        || InStr(title, "游戏盒子")) {
+                    if (InStr(title, "游戏") || InStr(title, "QQ")) {
                         gameHwnd := hwnd
                         break
                     }
@@ -102,7 +95,123 @@ class WindowManager {
 
         if (gameHwnd) {
             this.gameHwnd := gameHwnd
-            this.logger.Debug("通过关键词枚举找到游戏窗口")
+            this.logger.Debug("通过模糊匹配找到游戏窗口")
+            return true
+        }
+
+        ; 方法2.6：查找任何包含"游戏"或"Game"的窗口（最宽松条件）
+        gameHwnd := 0
+        try {
+            windows := WinGetList()
+            for hwnd in windows {
+                try {
+                    title := WinGetTitle(hwnd)
+                    class := WinGetClass(hwnd)
+                    processName := WinGetProcessName(hwnd)
+
+                    ; 跳过自身窗口
+                    if (InStr(title, "百战沙场自动化") || InStr(class, "AutoHotkeyGUI")) {
+                        continue
+                    }
+
+                    ; 最宽松的条件：任何与游戏相关的窗口
+                    if (InStr(title, "游戏") || InStr(processName, "Game") ||
+                        InStr(title, "Game") || InStr(class, "Game")) {
+                        gameHwnd := hwnd
+                        this.logger.Info(Format("通过最宽松条件找到窗口: {} ({})", title, processName))
+                        break
+                    }
+                }
+                catch {
+                    continue
+                }
+            }
+        }
+
+        if (gameHwnd) {
+            this.gameHwnd := gameHwnd
+            this.logger.Debug("通过最宽松条件找到游戏窗口")
+            return true
+        }
+
+        ; 方法3：通过关键词查找窗口标题
+        gameHwnd := 0
+        candidateWindows := []
+
+        try {
+            windows := WinGetList()
+            for hwnd in windows {
+                try {
+                    title := WinGetTitle(hwnd)
+                    class := WinGetClass(hwnd)
+                    processName := WinGetProcessName(hwnd)
+
+                    ; 跳过我们自己的GUI窗口
+                    if (InStr(title, "百战沙城自动化") || InStr(class, "AutoHotkeyGUI")) {
+                        continue
+                    }
+
+                    ; 收集候选窗口用于调试
+                    if (InStr(title, "百战沙城")
+                        || InStr(title, "QQ游戏")
+                        || InStr(title, "游戏盒子")
+                        || InStr(processName, "QQMicroGameBox")
+                        || InStr(processName, "QQGame")
+                        || InStr(processName, "Game")
+                        || class = this.gameWindowClass) {
+                        candidateWindows.Push(Map(
+                            "hwnd", hwnd,
+                            "title", title,
+                            "class", class,
+                            "process", processName
+                        ))
+                    }
+                }
+                catch {
+                    continue
+                }
+            }
+
+            ; 输出调试信息
+            if (candidateWindows.Length > 0) {
+                this.logger.Info(Format("找到 {} 个候选窗口:", candidateWindows.Length))
+                for i, window in candidateWindows {
+                    this.logger.Info(Format("候选窗口 {}: hwnd={}, title='{}', class='{}', process='{}'",
+                        i, window["hwnd"], window["title"], window["class"], window["process"]))
+                }
+
+                ; 优先选择最匹配的窗口
+                for window in candidateWindows {
+                    ; 优先选择百战沙城窗口
+                    if (InStr(window["title"], "百战沙城")) {
+                        gameHwnd := window["hwnd"]
+                        this.logger.Info(Format("选择游戏窗口: {}", window["title"]))
+                        break
+                    }
+                }
+
+                ; 如果没找到精确匹配，选择进程名包含游戏相关关键词的窗口
+                if (!gameHwnd) {
+                    for window in candidateWindows {
+                        if (InStr(window["process"], "QQMicroGameBox") || InStr(window["process"], "QQGame") || InStr(window["process"], "Game")) {
+                            gameHwnd := window["hwnd"]
+                            this.logger.Info(Format("选择游戏进程窗口: {}", window["title"]))
+                            break
+                        }
+                    }
+                }
+
+                ; 如果还没找到，选择第一个候选窗口
+                if (!gameHwnd && candidateWindows.Length > 0) {
+                    gameHwnd := candidateWindows[1]["hwnd"]
+                    this.logger.Info(Format("选择候选窗口: {}", candidateWindows[1]["title"]))
+                }
+            }
+        }
+
+        if (gameHwnd) {
+            this.gameHwnd := gameHwnd
+            this.logger.Debug("通过候选窗口列表找到游戏窗口")
             return true
         }
 
@@ -129,7 +238,6 @@ class WindowManager {
                         ; 检查是否是游戏相关窗口
                         if (class = this.gameWindowClass
                             || InStr(title, "百战沙城")
-                            || InStr(title, "百战沙场")
                             || InStr(title, "QQ游戏")
                             || InStr(title, "游戏盒子")) {
                             this.gameHwnd := hwnd
@@ -159,7 +267,7 @@ class WindowManager {
             ; 通过进程名查找
             pids := []
             for pid in ComObjGet("winmgmts:").ExecQuery(
-                "SELECT ProcessId FROM Win32_Process WHERE Name='" this.gameProcessName "'"
+                "SELECT ProcessId FROM Win32_Process WHERE Name='" this.gameProcessName "' OR Name='QQGame.exe'"
             ) {
                 pids.Push(pid.ProcessId)
             }
@@ -217,6 +325,22 @@ class WindowManager {
 
     IsGameRunning() {
         if (this.gameHwnd && WinExist("ahk_id " this.gameHwnd)) {
+            ; 额外验证：确保这不是我们自己的GUI窗口
+            try {
+                title := WinGetTitle("ahk_id " this.gameHwnd)
+                class := WinGetClass("ahk_id " this.gameHwnd)
+
+                if (InStr(title, "百战沙城自动化") || InStr(class, "AutoHotkeyGUI")) {
+                    this.logger.Debug("检测到自身GUI窗口，忽略")
+                    this.gameHwnd := 0
+                    return false
+                }
+            }
+            catch {
+                this.gameHwnd := 0
+                return false
+            }
+
             return true
         }
 
@@ -356,7 +480,7 @@ class WindowManager {
                 return true
             }
 
-            this.logger.Info("请手动启动QQ游戏盒子并打开《百战沙场》")
+            this.logger.Info("请手动启动QQ游戏并打开《百战沙城》")
 
             loop 30 {
                 Sleep(2000)

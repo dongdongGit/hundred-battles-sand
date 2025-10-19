@@ -93,14 +93,6 @@ class TaskManager {
                 "priority", 5,
                 "timeout", 0        ; 无超时
             ),
-            "friend_interaction", Map(
-                "name", "好友互动",
-                "description", "自动与好友互动获得奖励",
-                "enabled", true,
-                "interval", 3600,   ; 1小时
-                "priority", 4,
-                "timeout", 600
-            ),
             "demon_purge", Map(
                 "name", "除魔任务",
                 "description", "自动完成除魔任务，包括接取、执行和领取奖励",
@@ -109,6 +101,14 @@ class TaskManager {
                 "priority", 9,
                 "timeout", 1800,    ; 30分钟超时
                 "max_runs_per_day", 10
+            ),
+            "wild_boss", Map(
+                "name", "野外BOSS",
+                "description", "自动挑战野外BOSS获得奖励",
+                "enabled", true,
+                "interval", 3600,   ; 1小时
+                "priority", 8,
+                "timeout", 900      ; 15分钟超时
             )
         )
     }
@@ -150,10 +150,15 @@ class TaskManager {
     Start() {
         if (this.IsRunning()) {
             this.logger.Warn("任务管理器已经在运行中")
+            ToolTip("任务管理器已经在运行中")
+            Sleep(1000)
+            ToolTip("")
             return false
         }
 
         this.logger.Info("启动任务管理器")
+        ToolTip("正在启动任务管理器...")
+        Sleep(500)
 
         this.SetRunning(true)
         this.ResetStats()
@@ -162,6 +167,9 @@ class TaskManager {
         this.StartScheduler()
 
         this.logger.Info("任务管理器启动完成")
+        ToolTip("任务管理器启动完成")
+        Sleep(1000)
+        ToolTip("")
         return true
     }
 
@@ -308,10 +316,10 @@ class TaskManager {
                     this.ExecuteEquipmentUpgrade(task)
                 case "hangup_farming":
                     this.ExecuteHangupFarming(task)
-                case "friend_interaction":
-                    this.ExecuteFriendInteraction(task)
                 case "demon_purge":
                     this.ExecuteDemonPurge(task)
+                case "wild_boss":
+                    this.ExecuteWildBoss(task)
                 default:
                     throw Error("未知任务类型: " taskId)
             }
@@ -385,13 +393,6 @@ class TaskManager {
         this.logger.Info("挂机刷元宝完成")
     }
 
-    ExecuteFriendInteraction(task) {
-        this.logger.Info("执行好友互动任务")
-
-        Sleep(3000)
-
-        this.logger.Info("好友互动完成")
-    }
 
     ExecuteDemonPurge(task) {
         this.logger.Info("开始执行除魔任务")
@@ -415,6 +416,33 @@ class TaskManager {
             throw e
         }
     }
+
+    ExecuteWildBoss(task) {
+        this.logger.Info("开始执行野外BOSS任务")
+
+        try {
+            ; 创建野外BOSS任务实例（使用依赖注入）
+            wildBossTask := WildBossTask(this.logger, this.config, this.windowManager, this.imageRecognition)
+
+            ; 获取挑战地点配置
+            location := this.config.GetString("tasks", "wild_boss_location", "烈焰谷一层")
+
+            ; 执行野外BOSS挑战流程
+            success := wildBossTask.ExecuteWildBossChallenge(location)
+
+            if (success) {
+                this.logger.Info("野外BOSS挑战完成")
+            }
+            else {
+                this.logger.Warn("野外BOSS挑战失败或无需执行")
+            }
+        }
+        catch as e {
+            this.logger.Error(Format("野外BOSS任务执行出错: {}", e.Message))
+            throw e
+        }
+    }
+
 
     CompleteTask(taskId, success, errorMsg := "") {
         ; 检查任务是否存在
@@ -444,8 +472,13 @@ class TaskManager {
             task["totalTime"] += duration
         }
 
-        ; 从运行中任务移除
-        this.runningTasks.Delete(taskId)
+        ; 从运行中任务移除（添加安全检查）
+        if (this.runningTasks.Has(taskId)) {
+            this.runningTasks.Delete(taskId)
+        }
+        else {
+            this.logger.Warn(Format("任务 {} 不在运行中任务列表中", taskId))
+        }
 
         ; 更新统计
         this.UpdateTaskStats(taskId, success)

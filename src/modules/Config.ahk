@@ -31,7 +31,7 @@ class Config {
             ),
             "game", Map(
                 "window_class", "MainView_9F956014-12FC-42d8-80C7-9A90D4D567E3",
-                "window_title", "百战沙场",
+                "window_title", "百战沙城",
                 "process_name", "QQMicroGameBox.exe",
                 "delay_between_actions", 1000,
                 "random_delay_min", 200,
@@ -43,7 +43,8 @@ class Config {
                 "enable_resource_collection", true,
                 "enable_equipment_upgrade", true,
                 "enable_hangup_farming", true,
-                "enable_friend_interaction", true,
+                "enable_wild_boss", true,
+                "wild_boss_location", "鬼翼神殿一层",
                 "enable_mall_purchase", false,
                 "max_daily_runs", 10,
                 "hangup_duration", 3600,
@@ -138,12 +139,6 @@ class Config {
         }
         else if (Type(defaultValue) = "Float") {
             return Float(value)
-        }
-        else if (Type(defaultValue) = "Integer") {
-            return Integer(value)
-        }
-        else if (Type(defaultValue) = "Integer") {
-            return Integer(value)
         }
         else if (defaultValue is Boolean) {
             return this.__Class.BOOLEAN_VAILDRULES.Has(value)

@@ -1,6 +1,6 @@
-# 百战沙场自动化脚本
+# 百战沙城自动化脚本
 
-一个专为《百战沙场》游戏设计的自动化脚本工具，基于 AutoHotkey v2.0 开发。
+一个专为《百战沙城》游戏设计的自动化脚本工具，基于 AutoHotkey v2.0 开发。
 
 ## 功能特性
 
@@ -26,7 +26,7 @@
 
 ### 必需组件
 - **操作系统**：Windows 10/11 (64位)
-- **运行环境**：QQ游戏盒子
+- **运行环境**：QQ游戏
 - **脚本引擎**：AutoHotkey v2.0+
 - **驱动支持**：Interception 鼠标键盘驱动
 
@@ -114,7 +114,7 @@ cd bzzc-automation
 ```ini
 [game]
 window_class=MainView_9F956014-12FC-42d8-80C7-9A90D4D567E3
-window_title=百战沙场
+window_title=百战沙城
 delay_between_actions=1000
 random_delay_min=200
 random_delay_max=800
