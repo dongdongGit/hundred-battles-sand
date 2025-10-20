@@ -33,10 +33,12 @@ class MainGUI {
         this.imageRecognition := imageRecognitionInstance
         this.taskManager := taskManagerInstance
 
+        ; 创建事件协调器
+        this.eventCoordinator := GUIEventCoordinator(this.logger, this.config,
+            this.windowManager, this.imageRecognition, this.taskManager)
+
         this.guiHwnd := 0
         this.isVisible := false
-        this.statusText := ""
-        this.logText := ""
 
         this.controlButtons := Map()
         this.statusLabels := Map()
@@ -147,33 +149,120 @@ class MainGUI {
     }
 
     CreateMainControlTab() {
-        ; 游戏状态组
-        gameGroup := this.guiHwnd.Add("GroupBox", "xm+10 ym+40 w360 h100", "游戏状态")
+        try {
+            ; 定义控件常量以提高可维护性
+            static CONTROL := {
+                MARGIN: 10,        ; 控件边距
+                SPACING: 120,      ; 控件水平间距
+                ROW_HEIGHT: 20,    ; 控件行高
+                CONTROL_WIDTH: {   ; 控件宽度
+                    LABEL: 80,
+                    TEXT: 250,
+                    CHECKBOX: 100
+                },
+                GROUP_WIDTH: {     ; 组控件宽度
+                    TASK_CONTROL: 480
+                }
+            }
 
-        this.guiHwnd.Add("Text", "xp+10 yp+20 w80 h20", "游戏窗口:")
-        this.statusLabels["game_window"] := this.guiHwnd.Add("Text", "xp+90 yp w250 h20", "未检测")
+            ; 游戏状态组
+            gameGroup := this.guiHwnd.Add("GroupBox", "xm+10 ym+40 w360 h100", "游戏状态")
+            this.CreateGameStatusSection(CONTROL)
 
-        this.guiHwnd.Add("Text", "xp-90 yp+25 w80 h20", "游戏进程:")
-        this.statusLabels["game_process"] := this.guiHwnd.Add("Text", "xp+90 yp w250 h20", "未运行")
+            ; 任务控制组
+            taskGroup := this.guiHwnd.Add("GroupBox", "xm+380 ym+40 w480 h140", "任务控制")
+            this.CreateTaskControlSection(CONTROL)
 
-        this.guiHwnd.Add("Text", "xp-90 yp+25 w80 h20", "连接状态:")
-        this.statusLabels["connection"] := this.guiHwnd.Add("Text", "xp+90 yp w250 h20", "未连接")
+        } catch as e {
+            this.logger.Error(Format("创建主控制标签页失败: {}", e.Message))
+            throw e
+        }
+    }
 
-        ; 任务控制组
-        taskGroup := this.guiHwnd.Add("GroupBox", "xm+380 ym+40 w500 h140", "任务控制")
+    /**
+     * 创建游戏状态区域的控件
+     * @param {Object} CONTROL - 控件常量配置
+     */
+    CreateGameStatusSection(CONTROL) {
+        ; 创建游戏窗口状态标签和显示文本
+        this.guiHwnd.Add("Text", Format("xp+{} yp+{} w{} h{}",
+            CONTROL.MARGIN, CONTROL.ROW_HEIGHT, CONTROL.CONTROL_WIDTH.LABEL, CONTROL.ROW_HEIGHT), "游戏窗口:")
+        this.statusLabels["game_window"] := this.guiHwnd.Add("Text", Format("xp+90 yp w{} h{}",
+            CONTROL.CONTROL_WIDTH.TEXT, CONTROL.ROW_HEIGHT), "未检测")
 
-        this.guiHwnd.Add("CheckBox", "xp+10 yp+25 w100 h20 vEnableDailySignin", "每日签到")
-        this.guiHwnd.Add("CheckBox", "xp+120 yp w100 h20 vEnableDailyTasks", "日常任务")
+        ; 游戏进程状态
+        this.guiHwnd.Add("Text", Format("xp-90 yp+{} w{} h{}",
+            25, CONTROL.CONTROL_WIDTH.LABEL, CONTROL.ROW_HEIGHT), "游戏进程:")
+        this.statusLabels["game_process"] := this.guiHwnd.Add("Text", Format("xp+90 yp w{} h{}",
+            CONTROL.CONTROL_WIDTH.TEXT, CONTROL.ROW_HEIGHT), "未运行")
+
+        ; 连接状态
+        this.guiHwnd.Add("Text", Format("xp-90 yp+{} w{} h{}",
+            25, CONTROL.CONTROL_WIDTH.LABEL, CONTROL.ROW_HEIGHT), "连接状态:")
+        this.statusLabels["connection"] := this.guiHwnd.Add("Text", Format("xp+90 yp w{} h{}",
+            CONTROL.CONTROL_WIDTH.TEXT, CONTROL.ROW_HEIGHT), "未连接")
+    }
+
+    /**
+     * 创建任务控制区域的控件
+     * @param {Object} CONTROL - 控件常量配置
+     */
+    CreateTaskControlSection(CONTROL) {
+        ; 定义任务类型映射，提高可维护性
+        static TASKS := [{ variable: "EnableDailySignin", label: "每日签到" }, { variable: "EnableDailyTasks", label: "日常任务" }, { variable: "EnableDemonPurge", label: "除魔任务" }
+        ]
+
+        ; 创建任务选择复选框组
+        currentX := CONTROL.MARGIN
+        currentY := 25
+
+        for index, task in TASKS {
+            try {
+                ; 计算控件位置
+                position := Format("x{} y{} w{} h{} v{}",
+                    currentX, currentY, CONTROL.CONTROL_WIDTH.CHECKBOX, CONTROL.ROW_HEIGHT, task.variable)
+
+                ; 创建复选框控件
+                checkbox := this.guiHwnd.Add("CheckBox", position, task.label)
+
+                ; 存储控件引用以便后续操作
+                this.configControls[task.variable] := checkbox
+
+                ; 设置默认值（从配置读取）
+                defaultValue := this.config.GetBool("tasks", task.variable, false)
+                this.guiHwnd[task.variable].Value := defaultValue
+
+                ; 计算下一个控件的X坐标
+                if (index = 1) {
+                    ; 第一行放两个控件
+                    if (currentX + CONTROL.CONTROL_WIDTH.CHECKBOX + CONTROL.SPACING + CONTROL.CONTROL_WIDTH.CHECKBOX <=
+                        CONTROL.GROUP_WIDTH.TASK_CONTROL - CONTROL.MARGIN) {
+                        currentX += CONTROL.CONTROL_WIDTH.CHECKBOX + CONTROL.SPACING
+                    } else {
+                        ; 换行
+                        currentX := CONTROL.MARGIN
+                        currentY += 30
+                    }
+                } else {
+                    ; 其他行放一个控件
+                    currentX := CONTROL.MARGIN
+                    currentY += 30
+                }
+            } catch as e {
+                this.logger.Error(Format("创建任务复选框失败 {}: {}", task.label, e.Message))
+                continue  ; 继续创建其他控件
+            }
+        }
 
         ; 野外BOSS挂机（与每日签到左对齐）
         this.guiHwnd.Add("CheckBox", "xp-120 yp+30 w120 h20 vEnableWildBoss", "野外BOSS挂机")
 
         ; BOSS等级和挑战地点（与野外BOSS挂机垂直对齐）
-        this.guiHwnd.Add("Text", "xp yp+30 w60 h20", "BOSS等级:")
-        this.wildBossLevelCombo := this.guiHwnd.Add("ComboBox", "xp+60 yp w100 vWildBossLevel", ["妖级", "魔级", "王级", "帝级", "仙级", "神级", "绝世级", "神圣级", "圣尊级", "主宰级", "鸿蒙级", "远古级", "创世级", "洪荒级", "混沌级", "轮回级", "渡厄级", "寂灭级", "时光级", "暗黑级", "禁忌级", "星辰级", "曜日级", "传世级", "永恒级", "荣耀级", "万劫级", "诛仙级", "杀神级", "斗佛级", "炼魔级", "灭日级", "焚天级", "灭魔级", "斩魔级", "天人级"])
+        this.guiHwnd.Add("Text", "xp+120 yp w110 h20", "BOSS等级:")
+        this.wildBossLevelCombo := this.guiHwnd.Add("ComboBox", "xp+70 yp-4 w100 vWildBossLevel", ["妖级", "魔级", "王级", "帝级", "仙级", "神级", "绝世级", "神圣级", "圣尊级", "主宰级", "鸿蒙级", "远古级", "创世级", "洪荒级", "混沌级", "轮回级", "渡厄级", "寂灭级", "时光级", "暗黑级", "禁忌级", "星辰级", "曜日级", "传世级", "永恒级", "荣耀级", "万劫级", "诛仙级", "杀神级", "斗佛级", "炼魔级", "灭日级", "焚天级", "灭魔级", "斩魔级", "天人级"])
 
-        this.guiHwnd.Add("Text", "xp+120 yp w60 h20", "挑战地点:")
-        this.wildBossLocationCombo := this.guiHwnd.Add("ComboBox", "xp+60 yp w100 vWildBossLocation", ["请选择等级"])
+        this.guiHwnd.Add("Text", "xp+110 yp+4 w60 h20", "挑战地点:")
+        this.wildBossLocationCombo := this.guiHwnd.Add("ComboBox", "xp+60 yp-4 w100 vWildBossLocation", ["请选择等级"])
 
         ; 下拉菜单选项已在创建时设置完成
 
@@ -187,7 +276,31 @@ class MainGUI {
         ; 根据默认等级更新地点选项
         this.UpdateWildBossLocationsByLevel(defaultLevel)
 
-        this.guiHwnd.Add("CheckBox", "xp-250 yp+30 w100 h20 vEnableEquipment", "装备强化")
+        ; 装备强化复选框
+        this.guiHwnd.Add("CheckBox", Format("x{} y{} w{} h{} vEnableEquipment",
+            CONTROL.MARGIN, currentY, CONTROL.CONTROL_WIDTH.CHECKBOX, CONTROL.ROW_HEIGHT), "装备强化")
+        this.configControls["EnableEquipment"] := this.guiHwnd["EnableEquipment"]
+
+        ; 设置装备强化默认值
+        defaultEquipment := this.config.GetBool("tasks", "EnableEquipment", false)
+        this.guiHwnd["EnableEquipment"].Value := defaultEquipment
+    }
+
+    /**
+     * 创建装备强化控件的辅助方法
+     * @param {Object} CONTROL - 控件常量配置
+     */
+    CreateEquipmentSection(CONTROL) {
+        ; 装备强化复选框位置计算
+        equipmentY := 32  ; 与野外BOSS挂机垂直间距
+
+        this.guiHwnd.Add("CheckBox", Format("x{} y{} w{} h{} vEnableEquipment",
+            CONTROL.MARGIN, equipmentY, CONTROL.CONTROL_WIDTH.CHECKBOX, CONTROL.ROW_HEIGHT), "装备强化")
+        this.configControls["EnableEquipment"] := this.guiHwnd["EnableEquipment"]
+
+        ; 设置默认值
+        defaultValue := this.config.GetBool("tasks", "EnableEquipment", false)
+        this.guiHwnd["EnableEquipment"].Value := defaultValue
 
         ; 控制按钮（移到底部）
         this.startBtn := this.guiHwnd.Add("Button", "xm+10 yp+200 w80 h30", "启动")

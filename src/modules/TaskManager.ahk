@@ -6,21 +6,32 @@
 #Requires AutoHotkey v2.0
 
 class TaskManager {
-    __New(loggerInstance := "", configInstance := "") {
-        ; 如果没有传入实例，使用全局实例（向后兼容）
+    __New(loggerInstance := "", configInstance := "", windowManagerInstance := "", imageRecognitionInstance := "") {
+        ; 如果没有传入实例，使用默认构造（向后兼容）
         if (loggerInstance = "") {
-            loggerInstance := LoggerInstance
+            loggerInstance := Logger()
         }
         if (configInstance = "") {
-            configInstance := ConfigInstance
+            configInstance := Config()
+        }
+        if (windowManagerInstance = "") {
+            ; 只有在真正需要时才创建，避免循环依赖
+            windowManagerInstance := ""
+        }
+        if (imageRecognitionInstance = "") {
+            ; 只有在真正需要时才创建，避免循环依赖
+            imageRecognitionInstance := ""
         }
 
         this.logger := loggerInstance
         this.config := configInstance
+        this.windowManager := windowManagerInstance
+        this.imageRecognition := imageRecognitionInstance
 
         this.tasks := Map()
         this.runningTasks := Map()
         this.taskQueue := []
+        this.taskInstances := Map()  ; 任务实例缓存，避免重复创建
         this._isRunning := false
         this.maxConcurrentTasks := 3
         this.taskStats := Map()
@@ -69,14 +80,6 @@ class TaskManager {
                 "priority", 8,
                 "timeout", 600
             ),
-            "resource_collection", Map(
-                "name", "资源采集",
-                "description", "自动采集游戏资源点",
-                "enabled", true,
-                "interval", 1800,   ; 30分钟
-                "priority", 7,
-                "timeout", 900
-            ),
             "equipment_upgrade", Map(
                 "name", "装备强化",
                 "description", "自动强化装备到指定等级",
@@ -84,14 +87,6 @@ class TaskManager {
                 "interval", 7200,   ; 2小时
                 "priority", 6,
                 "timeout", 1200
-            ),
-            "hangup_farming", Map(
-                "name", "挂机刷元宝",
-                "description", "长时间自动挂机刷取元宝",
-                "enabled", true,
-                "interval", 0,      ; 持续执行
-                "priority", 5,
-                "timeout", 0        ; 无超时
             ),
             "demon_purge", Map(
                 "name", "除魔任务",
@@ -421,11 +416,22 @@ class TaskManager {
         this.logger.Info("开始执行野外BOSS任务")
 
         try {
-            ; 创建野外BOSS任务实例（使用依赖注入）
-            wildBossTask := WildBossTask(this.logger, this.config, this.windowManager, this.imageRecognition)
+            ; 获取或创建野外BOSS任务实例（带缓存机制）
+            wildBossTask := this.GetWildBossTaskInstance()
+
+            if (!wildBossTask) {
+                this.logger.Error("无法创建野外BOSS任务实例")
+                return false
+            }
 
             ; 获取挑战地点配置
             location := this.config.GetString("tasks", "wild_boss_location", "烈焰谷一层")
+
+            ; 验证位置配置有效性
+            if (!this.ValidateWildBossLocation(location)) {
+                this.logger.Error(Format("无效的野外BOSS位置配置: {}", location))
+                return false
+            }
 
             ; 执行野外BOSS挑战流程
             success := wildBossTask.ExecuteWildBossChallenge(location)
@@ -436,11 +442,101 @@ class TaskManager {
             else {
                 this.logger.Warn("野外BOSS挑战失败或无需执行")
             }
+
+            return success
         }
         catch as e {
             this.logger.Error(Format("野外BOSS任务执行出错: {}", e.Message))
             throw e
         }
+    }
+
+    /**
+     * 获取野外BOSS任务实例（带缓存机制）
+     * @returns {WildBossTask|False} 任务实例或失败时返回false
+     */
+    GetWildBossTaskInstance() {
+        ; 检查依赖是否有效
+        if (!this.ValidateDependencies()) {
+            this.logger.Error("野外BOSS任务依赖验证失败")
+            return false
+        }
+
+        ; 使用缓存机制避免重复创建实例
+        if (!this.taskInstances.Has("wildBoss")) {
+            try {
+                this.taskInstances["wildBoss"] := WildBossTask(
+                    this.logger,
+                    this.config,
+                    this.windowManager,
+                    this.imageRecognition
+                )
+                this.logger.Debug("创建新的野外BOSS任务实例")
+            }
+            catch as e {
+                this.logger.Error(Format("创建野外BOSS任务实例失败: {}", e.Message))
+                return false
+            }
+        }
+
+        return this.taskInstances["wildBoss"]
+    }
+
+    /**
+     * 验证野外BOSS位置配置
+     * @param {String} location - 要验证的位置名称
+     * @returns {Boolean} 验证是否通过
+     */
+    ValidateWildBossLocation(location) {
+        if (location = "" || Trim(location) = "") {
+            this.logger.Error("野外BOSS位置不能为空")
+            return false
+        }
+
+        ; 定义有效的野外BOSS位置列表
+        validLocations := [
+            "烈焰谷一层", "烈焰谷二层", "烈焰谷三层",
+            "冰霜废墟一层", "冰霜废墟二层", "冰霜废墟三层",
+            "黑暗森林一层", "黑暗森林二层", "黑暗森林三层",
+            "沙漠遗迹一层", "沙漠遗迹二层", "沙漠遗迹三层"
+        ]
+
+        for validLocation in validLocations {
+            if (location = validLocation) {
+                return true
+            }
+        }
+
+        this.logger.Error(Format("无效的野外BOSS位置: {}", location))
+        return false
+    }
+
+    /**
+     * 验证任务执行依赖
+     * @returns {Boolean} 依赖是否有效
+     */
+    ValidateDependencies() {
+        if (!this.logger) {
+            this.logger.Error("日志器实例为空")
+            return false
+        }
+
+        if (!this.config) {
+            this.logger.Error("配置实例为空")
+            return false
+        }
+
+        if (!this.windowManager) {
+            this.logger.Error("窗口管理器实例为空")
+            return false
+        }
+
+        if (!this.imageRecognition) {
+            this.logger.Error("图像识别实例为空")
+            return false
+        }
+
+        return true
     }
 
 
@@ -645,7 +741,7 @@ class TaskManager {
     }
 
     Resume() {
-        if (!this.isRunning) {
+        if (!this.IsRunning()) {
             this.SetRunning(true)
             this.logger.Info("任务管理器已恢复")
             return true
@@ -656,7 +752,7 @@ class TaskManager {
     ; 获取运行状态
     GetStatus() {
         return Map(
-            "is_running", this.isRunning,
+            "is_running", this.IsRunning(),
             "total_tasks", this.tasks.Count,
             "running_tasks", this.runningTasks.Count,
             "task_stats", this.GetStats()
@@ -676,13 +772,14 @@ class TaskManager {
         }
 
         this.runningTasks := Map()
+        this.taskInstances := Map()  ; 清理任务实例缓存
         this.ResetStats()
     }
 
     ; 获取调试信息
     GetDebugInfo() {
         debugInfo := Map(
-            "is_running", this.isRunning,
+            "is_running", this.IsRunning(),
             "task_count", this.tasks.Count,
             "running_count", this.runningTasks.Count,
             "stats", this.GetStats()

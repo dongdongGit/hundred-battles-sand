@@ -59,7 +59,7 @@ class AutomationApp {
         ; 创建依赖于Config的组件
         this.WindowManager := WindowManager(this.Config, this.Logger)
         this.ImageRecognition := ImageRecognition(this.Config, this.WindowManager)
-        this.TaskManager := TaskManager(this.Logger, this.Config)
+        this.TaskManager := TaskManager(this.Logger, this.Config, this.WindowManager, this.ImageRecognition)
         this.WildBossTask := WildBossTask(this.Logger, this.Config, this.WindowManager, this.ImageRecognition)
         this.GameController := GameController(this.Logger, this.WindowManager, this.ImageRecognition, this.Config, this.TaskManager)
         this.MainGUI := MainGUI(this.Logger, this.Config, this.WindowManager, this.ImageRecognition, this.TaskManager)
